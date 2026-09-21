@@ -7752,8 +7752,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         </div>
         <button class="btn-icon" onclick="closeStoragePreview()">&times;</button>
       </div>
-      <div class="modal-body-clean" style="padding: 10px; background: #090d16; border-radius: 0 0 var(--radius-md) var(--radius-md);">
-        <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+      <div class="modal-body-clean" style="padding: 12px; background: var(--bg-card); border-radius: 0 0 var(--radius-md) var(--radius-md);">
+        <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <div class="vturb-skeleton-player" id="storagePreviewSkeleton">
+            <div class="vturb-skeleton-player-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+            </div>
+            <div class="vturb-skeleton-player-pulse">Carregando player...</div>
+          </div>
           <iframe id="storagePreviewFrame" style="width: 100%; height: 100%; border: 0; display: block;" allow="autoplay; fullscreen"></iframe>
         </div>
       </div>
@@ -10083,7 +10089,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         }
       }
 
+      const skeleton = document.getElementById('storagePreviewSkeleton');
+      if (skeleton) skeleton.classList.remove('hidden');
+
       if (frame) {
+        frame.onload = () => {
+          if (skeleton) skeleton.classList.add('hidden');
+        };
         frame.src = `/player.html?id=${encodeURIComponent(id)}&preview=1&token=${encodeURIComponent(token || '')}`;
       }
 
@@ -10093,6 +10105,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function closeStoragePreview() {
       const modal = document.getElementById('modalStorageVideoPreview');
       const frame = document.getElementById('storagePreviewFrame');
+      const skeleton = document.getElementById('storagePreviewSkeleton');
+      if (skeleton) skeleton.classList.remove('hidden');
       if (frame) {
         frame.src = 'about:blank';
       }

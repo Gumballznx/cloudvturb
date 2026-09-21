@@ -854,7 +854,7 @@
       const smartAutoplay = params.has('smart_autoplay') ? params.get('smart_autoplay') !== '0' : (dbSettings.smartAutoplay !== false);
       const fakeProgress = params.has('fake_progress') ? params.get('fake_progress') !== '0' : (dbSettings.fakeProgress !== false);
       const blockSeek = params.has('block_seek') ? params.get('block_seek') !== '0' : (dbSettings.blockSeek !== false);
-      const resumeEnabled = params.has('resume') ? params.get('resume') !== '0' : (dbSettings.resume !== false);
+      const resumeEnabled = !isPreview && (params.has('resume') ? params.get('resume') !== '0' : (dbSettings.resume !== false));
       const resumeTitle = params.get('res_title') || dbSettings.resumeTitle || 'Já começou a ver este vídeo';
       const resumePlayText = params.get('res_play') || dbSettings.resumePlayText || 'Continuar Assistindo';
       const resumeReplayText = params.get('res_replay') || dbSettings.resumeReplayText || 'Reiniciar o vídeo';
@@ -868,7 +868,7 @@
           if (sTime && sTime > 5) savedResumeTime = sTime;
         } catch (e) {}
       }
-      const hasSavedResume = savedResumeTime > 5;
+      const hasSavedResume = !isPreview && savedResumeTime > 5;
       const rawCtaUrl = params.get('cta_url') || dbSettings.ctaUrl || '';
       const validCtaUrl = (rawCtaUrl && rawCtaUrl.trim() !== '' && rawCtaUrl !== 'https://seusite.com/checkout') ? rawCtaUrl.trim() : '';
       const ctaEnabled = (params.has('cta') ? params.get('cta') === '1' : (dbSettings.ctaEnabled === true)) && Boolean(validCtaUrl);
@@ -1079,6 +1079,9 @@
       }
 
       if (resumeModal) {
+        if (isPreview) {
+          resumeModal.style.display = 'none';
+        }
         resumeModal.style.setProperty('--resume-bg', resumeBgColor);
         resumeModal.style.setProperty('--resume-color', resumeTextColor);
         const titleEl = document.getElementById('resumeTitle');

@@ -145,6 +145,8 @@
       --radius-lg: 16px;
       --sidebar-width: 260px;
       --header-height: 64px;
+      --skeleton-bg: #E2E8F0;
+      --skeleton-shimmer: rgba(255, 255, 255, 0.7);
     }
 
     html[data-theme="dark"] {
@@ -158,6 +160,8 @@
       --color-primary-border: rgba(37, 99, 235, 0.3);
       --border-hover: #374151;
       --text-dim: #6B7280;
+      --skeleton-bg: #1F2937;
+      --skeleton-shimmer: rgba(255, 255, 255, 0.08);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -573,6 +577,75 @@
       letter-spacing: -0.3px;
       user-select: none;
       text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+    }
+    @keyframes vturbSkeletonShimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes vturbSkeletonPulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .vturb-skeleton {
+      background: var(--skeleton-bg);
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+    }
+    .vturb-skeleton::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent 0%, var(--skeleton-shimmer) 50%, transparent 100%);
+      animation: vturbSkeletonShimmer 1.5s infinite;
+    }
+    .vturb-skeleton-player {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
+    }
+    html[data-theme="dark"] .vturb-skeleton-player {
+      background: #090d16;
+    }
+    .vturb-skeleton-player.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .vturb-skeleton-player-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: var(--skeleton-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+    }
+    .vturb-skeleton-player-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, var(--skeleton-shimmer), transparent);
+      animation: vturbSkeletonShimmer 1.5s infinite;
+    }
+    .vturb-skeleton-player-pulse {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-dim);
+      animation: vturbSkeletonPulse 1.5s infinite ease-in-out;
     }
 
     .sidebar-profile-container {
@@ -1647,11 +1720,19 @@
       width: 100%;
       max-width: 720px;
       aspect-ratio: 16 / 9;
-      background: #000;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
-      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
       overflow: hidden;
       transition: all 0.3s ease;
+      position: relative;
+    }
+
+    html[data-theme="dark"] .preview-iframe-wrapper {
+      background: #000;
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
     }
 
     .preview-iframe-wrapper.mobile {
@@ -1910,18 +1991,23 @@
       top: calc(100% + 6px);
       left: 0;
       width: 260px;
-      background: #181b24;
-      border: 1px solid rgba(255,255,255,0.12);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
       border-radius: 10px;
-      box-shadow: 0 14px 34px rgba(0,0,0,0.5);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
       z-index: 1000;
       overflow: hidden;
       display: none;
     }
+    html[data-theme="dark"] .va-dropdown-panel {
+      background: #181b24;
+      border-color: rgba(255,255,255,0.12);
+      box-shadow: 0 14px 34px rgba(0,0,0,0.5);
+    }
     .va-dropdown-panel.active { display: block; }
     .va-dropdown-search-wrap {
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      border-bottom: 1px solid var(--border-subtle);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -1931,7 +2017,7 @@
       border: none;
       outline: none;
       font-size: 12.5px;
-      color: #fff;
+      color: var(--text-main);
       width: 100%;
     }
     .va-dropdown-list {
@@ -1950,7 +2036,7 @@
       transition: background 0.12s;
     }
     .va-dropdown-item:hover {
-      background: rgba(255,255,255,0.06);
+      background: var(--bg-card-hover);
     }
     .va-dropdown-check {
       width: 16px;
@@ -2001,7 +2087,10 @@
       left: 0;
       right: 0;
       height: 1px;
-      border-bottom: 1px dashed rgba(255,255,255,0.07);
+      border-bottom: 1px dashed var(--border-subtle);
+    }
+    html[data-theme="dark"] .va-funnel-gridline {
+      border-bottom-color: rgba(255,255,255,0.07);
     }
     .va-funnel-columns-wrap {
       position: absolute;
@@ -2039,22 +2128,27 @@
     }
     .va-funnel-pill {
       margin-bottom: 8px;
-      background: #141721;
-      border: 1px solid rgba(255,255,255,0.12);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
       border-radius: 8px;
       padding: 5px 10px;
       text-align: center;
       font-size: 11.5px;
       line-height: 1.25;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
       white-space: nowrap;
     }
-    .va-funnel-pill-pct { font-weight: 700; color: #fff; }
-    .va-funnel-pill-count { font-size: 11px; color: var(--text-dim); }
+    html[data-theme="dark"] .va-funnel-pill {
+      background: #141721;
+      border-color: rgba(255,255,255,0.12);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+    .va-funnel-pill-pct { font-weight: 700; color: var(--text-main); }
+    .va-funnel-pill-count { font-size: 11px; color: var(--text-muted); }
     .va-funnel-labels-row {
       display: flex;
       margin-left: 48px;
-      border-top: 1px solid rgba(255,255,255,0.1);
+      border-top: 1px solid var(--border-subtle);
       padding-top: 14px;
     }
     .va-funnel-label-col {
@@ -2317,16 +2411,22 @@
       position: relative;
       width: 100%;
       height: 380px;
-      background: #000;
+      background: var(--bg-card);
       border-radius: 12px;
       overflow: hidden;
       margin-bottom: 24px;
       border: 1px solid var(--border-subtle);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: crosshair;
       user-select: none;
+    }
+    html[data-theme="dark"] .va-retention-chart-box {
+      background: #090d16;
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     }
     .va-retention-bg-video {
       position: absolute;
@@ -2337,6 +2437,9 @@
       object-fit: contain;
       pointer-events: none;
       opacity: 0.85;
+      background: transparent;
+    }
+    html[data-theme="dark"] .va-retention-bg-video {
       background: #000;
     }
     .va-retention-grid-overlay {
@@ -2352,16 +2455,22 @@
     .va-retention-grid-line {
       width: 100%;
       height: 1px;
-      background: rgba(255, 255, 255, 0.12);
+      background: var(--border-subtle);
       display: flex;
       align-items: center;
+    }
+    html[data-theme="dark"] .va-retention-grid-line {
+      background: rgba(255, 255, 255, 0.08);
     }
     .va-retention-grid-label {
       position: absolute;
       left: 12px;
       font-size: 11px;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--text-dim);
+    }
+    html[data-theme="dark"] .va-retention-grid-label {
+      color: rgba(255, 255, 255, 0.45);
     }
     .va-retention-svg-layer {
       position: absolute;
@@ -2397,32 +2506,46 @@
       top: 0;
       bottom: 28px;
       width: 1px;
-      background: rgba(255, 255, 255, 0.4);
-      border-left: 1px dashed rgba(255, 255, 255, 0.85);
+      background: rgba(100, 116, 139, 0.5);
+      border-left: 1px dashed rgba(100, 116, 139, 0.85);
       pointer-events: none;
       z-index: 7;
+    }
+    html[data-theme="dark"] .va-retention-hover-line {
+      background: rgba(255, 255, 255, 0.4);
+      border-left-color: rgba(255, 255, 255, 0.85);
     }
     .va-retention-tooltip {
       position: absolute;
       z-index: 12;
-      background: rgba(15, 23, 42, 0.94);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
       backdrop-filter: blur(8px);
       border-radius: 8px;
       padding: 8px 12px;
-      color: #fff;
+      color: var(--text-main);
       font-size: 11.5px;
       pointer-events: none;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
       min-width: 130px;
+    }
+    html[data-theme="dark"] .va-retention-tooltip {
+      background: rgba(15, 23, 42, 0.94);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
     }
     .va-retention-tooltip .va-tt-header {
       font-weight: 700;
-      color: #f1f5f9;
+      color: var(--text-main);
       margin-bottom: 6px;
       padding-bottom: 4px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid var(--border-subtle);
       font-size: 12px;
+    }
+    html[data-theme="dark"] .va-retention-tooltip .va-tt-header {
+      color: #f1f5f9;
+      border-bottom-color: rgba(255, 255, 255, 0.1);
     }
     .va-retention-tooltip .va-tt-row {
       display: flex;
@@ -2430,6 +2553,9 @@
       justify-content: space-between;
       gap: 12px;
       margin-top: 3px;
+      color: var(--text-muted);
+    }
+    html[data-theme="dark"] .va-retention-tooltip .va-tt-row {
       color: #94a3b8;
     }
     .va-retention-tooltip .va-tt-dot {
@@ -2441,6 +2567,9 @@
     }
     .va-retention-tooltip .va-tt-val {
       font-weight: 600;
+      color: var(--text-main);
+    }
+    html[data-theme="dark"] .va-retention-tooltip .va-tt-val {
       color: #f8fafc;
     }
     .va-retention-player-controls {
@@ -2451,16 +2580,22 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(15, 23, 42, 0.82);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
       backdrop-filter: blur(8px);
       border-radius: 20px;
       padding: 4px 12px 4px 6px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    }
+    html[data-theme="dark"] .va-retention-player-controls {
+      background: rgba(15, 23, 42, 0.82);
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
     }
     .va-player-ctrl-btn {
       background: transparent;
       border: none;
-      color: #ffffff;
+      color: var(--text-main);
       cursor: pointer;
       padding: 4px;
       display: flex;
@@ -2469,16 +2604,22 @@
       border-radius: 50%;
       transition: background 0.15s, color 0.15s;
     }
+    html[data-theme="dark"] .va-player-ctrl-btn {
+      color: #ffffff;
+    }
     .va-player-ctrl-btn:hover {
-      background: rgba(255, 255, 255, 0.18);
+      background: var(--bg-card-hover);
       color: #10b981;
     }
     .va-player-time {
       font-size: 11px;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.9);
+      color: var(--text-main);
       letter-spacing: 0.5px;
       user-select: none;
+    }
+    html[data-theme="dark"] .va-player-time {
+      color: rgba(255, 255, 255, 0.9);
     }
     .va-retention-center-play {
       position: absolute;
@@ -6922,6 +7063,12 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
             <div class="vturb-preview-stage" id="vturbPreviewStage" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg-base); overflow: auto; position: relative;">
               <div class="vturb-desktop-canvas" id="vturbDesktopCanvas">
                 <div class="preview-iframe-wrapper" id="previewWrapper">
+                  <div class="vturb-skeleton-player" id="editorPreviewSkeleton">
+                    <div class="vturb-skeleton-player-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                    </div>
+                    <div class="vturb-skeleton-player-pulse">Carregando player...</div>
+                  </div>
                   <iframe id="editorPreviewFrame" allow="autoplay; fullscreen"></iframe>
                 </div>
               </div>
@@ -6929,7 +7076,12 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               <div class="vturb-mobile-mockup-wrap" id="vturbMobileCanvas" style="display: none;">
                 <div class="vturb-phone-mockup">
                   <div class="phone-speaker-bar"></div>
-                  <div class="phone-screen-container">
+                  <div class="phone-screen-container" style="position: relative;">
+                    <div class="vturb-skeleton-player" id="editorMobileSkeleton" style="position: absolute; inset: 0;">
+                      <div class="vturb-skeleton-player-icon" style="width: 44px; height: 44px; margin-bottom: 0;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                      </div>
+                    </div>
                     <iframe id="editorPreviewFrameMobile" allow="autoplay; fullscreen"></iframe>
                   </div>
                 </div>
@@ -6967,7 +7119,13 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
 
           <div class="vturb-stage-container" style="flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg-base); overflow: auto; padding: 24px;">
             <div class="vturb-desktop-canvas" id="vturbDetailsDesktopCanvas" style="width: 100%; max-width: 820px;">
-              <div class="preview-iframe-wrapper" id="detailsPreviewWrapper" style="position: relative; width: 100%; padding-top: 56.25%; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.6);">
+              <div class="preview-iframe-wrapper" id="detailsPreviewWrapper" style="position: relative; width: 100%; padding-top: 56.25%; border-radius: 12px; overflow: hidden;">
+                <div class="vturb-skeleton-player" id="detailsPreviewSkeleton">
+                  <div class="vturb-skeleton-player-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                  </div>
+                  <div class="vturb-skeleton-player-pulse">Carregando player...</div>
+                </div>
                 <iframe id="detailsPreviewFrame" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" allow="autoplay; fullscreen"></iframe>
               </div>
             </div>
@@ -6975,7 +7133,12 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
             <div class="vturb-mobile-mockup-wrap" id="vturbDetailsMobileCanvas" style="display: none; align-items: center; justify-content: center; width: 100%; height: 100%;">
               <div class="vturb-phone-mockup">
                 <div class="phone-speaker-bar"></div>
-                <div class="phone-screen-container">
+                <div class="phone-screen-container" style="position: relative;">
+                  <div class="vturb-skeleton-player" id="detailsMobileSkeleton" style="position: absolute; inset: 0;">
+                    <div class="vturb-skeleton-player-icon" style="width: 44px; height: 44px; margin-bottom: 0;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                    </div>
+                  </div>
                   <iframe id="detailsPreviewFrameMobile" allow="autoplay; fullscreen"></iframe>
                 </div>
               </div>
@@ -11700,10 +11863,161 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       else if (currentVaTab === 'live') await loadVaLive();
     }
 
+    function getSkeletonRetentionMetricsHtml() {
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+          <div class="vturb-skeleton" style="width:110px;height:24px;border-radius:6px;"></div>
+          <div style="display:flex;gap:10px;">
+            <div class="vturb-skeleton" style="width:120px;height:32px;border-radius:8px;"></div>
+            <div class="vturb-skeleton" style="width:120px;height:32px;border-radius:8px;"></div>
+          </div>
+        </div>
+        <div class="metrics-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">
+          ${Array.from({ length: 8 }).map(() => `
+            <div class="metric-card" style="padding:16px;">
+              <div class="vturb-skeleton" style="width:55%;height:13px;border-radius:4px;margin-bottom:10px;"></div>
+              <div class="vturb-skeleton" style="width:70%;height:26px;border-radius:6px;margin-bottom:8px;"></div>
+              <div class="vturb-skeleton" style="width:45%;height:11px;border-radius:4px;"></div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function getSkeletonHeatmapHtml() {
+      const bands = ['00:00','02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
+      const days = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+      return `
+        <div style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:12px;padding:22px;max-width:860px;overflow-x:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div class="vturb-skeleton" style="width:180px;height:34px;border-radius:8px;"></div>
+            <div class="vturb-skeleton" style="width:240px;height:20px;border-radius:6px;"></div>
+          </div>
+          <div class="va-heatmap-grid" style="opacity:0.85;">
+            ${bands.map(b => {
+              const cells = days.map(() => `<div class="va-heatmap-cell vturb-skeleton" style="border-radius:3px;"></div>`).join('');
+              return `<div class="va-heatmap-time" style="color:var(--text-dim);">${b}</div>${cells}`;
+            }).join('')}
+            <div></div>
+            ${days.map(d => `<div class="va-heatmap-foot">${d}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function getSkeletonFunnelHtml() {
+      const heights = ['90%', '65%', '42%', '20%'];
+      const labels = ['1. Visualizações Únicas', '2. Plays Únicos', '3. Cliques no Botão', '4. Conversões'];
+      return `
+        <div class="va-funnel-card">
+          <div class="va-funnel-topbar">
+            <div class="vturb-skeleton" style="width:190px;height:34px;border-radius:8px;"></div>
+            <div class="vturb-skeleton" style="width:140px;height:18px;border-radius:6px;"></div>
+          </div>
+          <div class="va-funnel-chart-container">
+            <div class="va-funnel-y-axis">
+              <span>100%</span>
+              <span>75%</span>
+              <span>50%</span>
+              <span>25%</span>
+              <span>0%</span>
+            </div>
+            <div class="va-funnel-chart-stage">
+              <div class="va-funnel-gridline" style="top:0%;"></div>
+              <div class="va-funnel-gridline" style="top:25%;"></div>
+              <div class="va-funnel-gridline" style="top:50%;"></div>
+              <div class="va-funnel-gridline" style="top:75%;"></div>
+              <div class="va-funnel-gridline" style="top:100%;"></div>
+              <div class="va-funnel-columns-wrap">
+                ${heights.map(h => `
+                  <div class="va-funnel-col">
+                    <div class="va-funnel-pill vturb-skeleton" style="width:68px;height:38px;margin-bottom:8px;border-radius:8px;"></div>
+                    <div class="va-funnel-bar-track">
+                      <div class="vturb-skeleton" style="width:100%;height:${h};border-radius:6px 6px 0 0;"></div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="va-funnel-labels-row">
+            ${labels.map(l => `<div class="va-funnel-label-col" style="color:var(--text-dim);font-size:12px;">${l}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function getSkeletonSummaryHtml() {
+      return `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
+          ${Array.from({ length: 4 }).map(() => `
+            <div class="metric-card" style="padding:18px;">
+              <div class="vturb-skeleton" style="width:50%;height:14px;border-radius:4px;margin-bottom:12px;"></div>
+              <div class="vturb-skeleton" style="width:75%;height:28px;border-radius:6px;margin-bottom:10px;"></div>
+              <div class="vturb-skeleton" style="width:40%;height:12px;border-radius:4px;"></div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="card-panel" style="padding:22px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:20px;">
+            <div class="vturb-skeleton" style="width:140px;height:20px;border-radius:4px;"></div>
+            <div class="vturb-skeleton" style="width:180px;height:28px;border-radius:6px;"></div>
+          </div>
+          <div class="vturb-skeleton" style="width:100%;height:260px;border-radius:10px;"></div>
+        </div>
+      `;
+    }
+
+    function getSkeletonBenchmarkHtml() {
+      return `
+        <div class="card-panel" style="padding:40px 24px;max-width:680px;margin:24px auto;text-align:center;">
+          <div class="vturb-skeleton" style="width:54px;height:54px;border-radius:50%;margin:0 auto 16px;"></div>
+          <div class="vturb-skeleton" style="width:260px;height:22px;border-radius:6px;margin:0 auto 12px;"></div>
+          <div class="vturb-skeleton" style="width:80%;height:14px;border-radius:4px;margin:0 auto 8px;"></div>
+          <div class="vturb-skeleton" style="width:60%;height:14px;border-radius:4px;margin:0 auto 20px;"></div>
+        </div>
+      `;
+    }
+
+    function getSkeletonLiveHtml() {
+      return `
+        <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;margin-top:10px;">
+          <div class="card-panel" style="padding:24px;min-height:380px;display:flex;flex-direction:column;">
+            <div class="vturb-skeleton" style="width:200px;height:24px;border-radius:6px;margin-bottom:20px;"></div>
+            <div class="vturb-skeleton" style="flex:1;width:100%;min-height:280px;border-radius:10px;"></div>
+          </div>
+          <div class="card-panel" style="padding:20px;min-height:380px;">
+            <div class="vturb-skeleton" style="width:150px;height:20px;border-radius:6px;margin-bottom:16px;"></div>
+            ${Array.from({ length: 5 }).map(() => `
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle);">
+                <div class="vturb-skeleton" style="width:36px;height:36px;border-radius:50%;"></div>
+                <div style="flex:1;">
+                  <div class="vturb-skeleton" style="width:60%;height:13px;border-radius:4px;margin-bottom:6px;"></div>
+                  <div class="vturb-skeleton" style="width:40%;height:11px;border-radius:4px;"></div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function getSkeletonTableRowsHtml(cols = 7, count = 5) {
+      return Array.from({ length: count }).map(() => `
+        <tr>
+          ${Array.from({ length: cols }).map((_, c) => `
+            <td style="padding:14px 16px;">
+              <div class="vturb-skeleton" style="height:14px;width:${c === 0 ? '70%' : (c === 1 ? '85%' : '50%')};border-radius:4px;"></div>
+            </td>
+          `).join('')}
+        </tr>
+      `).join('');
+    }
+
     async function loadVaRetention() {
       const subArea = document.getElementById('vaRetentionSubContentArea');
       if (!subArea) return;
-      subArea.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:36px;text-align:center;">Carregando métricas...</div>';
+      subArea.innerHTML = getSkeletonRetentionMetricsHtml();
 
       try {
         const qs = getVaQueryStr();
@@ -12814,7 +13128,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     async function loadVaSummary() {
       const container = document.getElementById('vaSummaryContent');
       if (!container) return;
-      container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px;">Carregando resumo temporal...</div>';
+      container.innerHTML = getSkeletonSummaryHtml();
       try {
         const qs = getVaQueryStr();
         const data = await api(`/api/analytics/video/${currentVaVideoId}/summary?${qs}`);
@@ -12962,7 +13276,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     async function loadVaFunnel() {
       const container = document.getElementById('vaFunnelContent');
       if (!container) return;
-      container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px;">Carregando funil...</div>';
+      container.innerHTML = getSkeletonFunnelHtml();
       try {
         const qs = getVaQueryStr();
         const data = await api(`/api/analytics/video/${currentVaVideoId}/funnel?${qs}`);
@@ -13032,7 +13346,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     async function loadVaBestTimes() {
       const container = document.getElementById('vaBestTimesContent');
       if (!container) return;
-      container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px;">Carregando mapa de horários...</div>';
+      container.innerHTML = getSkeletonHeatmapHtml();
       try {
         const qs = getVaQueryStr();
         const data = await api(`/api/analytics/video/${currentVaVideoId}/best-times?${qs}&metric=${encodeURIComponent(vaCurrentBestTimesMetric)}`);
@@ -13111,7 +13425,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         clearInterval(vaLivePollTimer);
         vaLivePollTimer = null;
       }
-      container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px;">Carregando visualização ao vivo...</div>';
+      container.innerHTML = getSkeletonLiveHtml();
       try {
         const data = await api(`/api/analytics/video/${currentVaVideoId}/live`);
         renderVaLiveContent(data);
@@ -13452,7 +13766,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     async function loadVaBenchmark() {
       const container = document.getElementById('vaBenchmarkContent');
       if (!container) return;
-      container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px;">Carregando benchmarks...</div>';
+      container.innerHTML = getSkeletonBenchmarkHtml();
       try {
         const qs = getVaQueryStr();
         const data = await api(`/api/analytics/video/${currentVaVideoId}/benchmark?${qs}`);
@@ -14097,11 +14411,31 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       const deskFrame = document.getElementById('detailsPreviewFrame');
       const mobFrame = document.getElementById('detailsPreviewFrameMobile');
-      if (deskFrame && (!deskFrame.src || !deskFrame.src.includes(`id=${v.id}`))) {
-        deskFrame.src = playerSrc;
+      const deskSkeleton = document.getElementById('detailsPreviewSkeleton');
+      const mobSkeleton = document.getElementById('detailsMobileSkeleton');
+
+      if (deskSkeleton) deskSkeleton.classList.remove('hidden');
+      if (mobSkeleton) mobSkeleton.classList.remove('hidden');
+
+      if (deskFrame) {
+        deskFrame.onload = () => {
+          if (deskSkeleton) deskSkeleton.classList.add('hidden');
+        };
+        if (!deskFrame.src || !deskFrame.src.includes(`id=${v.id}`)) {
+          deskFrame.src = playerSrc;
+        } else {
+          if (deskSkeleton) deskSkeleton.classList.add('hidden');
+        }
       }
-      if (mobFrame && (!mobFrame.src || !mobFrame.src.includes(`id=${v.id}`))) {
-        mobFrame.src = playerSrc;
+      if (mobFrame) {
+        mobFrame.onload = () => {
+          if (mobSkeleton) mobSkeleton.classList.add('hidden');
+        };
+        if (!mobFrame.src || !mobFrame.src.includes(`id=${v.id}`)) {
+          mobFrame.src = playerSrc;
+        } else {
+          if (mobSkeleton) mobSkeleton.classList.add('hidden');
+        }
       }
 
       const isVertical = v.settings && v.settings.aspectRatio === '9:16';
@@ -14633,9 +14967,21 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         p.set('preview', '1');
 
         const newSrc = '/player?' + p.toString();
+        const edDeskSkel = document.getElementById('editorPreviewSkeleton');
+        const edMobSkel = document.getElementById('editorMobileSkeleton');
+        if (edDeskSkel) edDeskSkel.classList.remove('hidden');
+        if (edMobSkel) edMobSkel.classList.remove('hidden');
+
         iframes.forEach(iframe => {
+          iframe.onload = () => {
+            if (edDeskSkel) edDeskSkel.classList.add('hidden');
+            if (edMobSkel) edMobSkel.classList.add('hidden');
+          };
           if (!iframe.src || !iframe.src.includes(`id=${v.id}`)) {
             iframe.src = newSrc;
+          } else {
+            if (edDeskSkel) edDeskSkel.classList.add('hidden');
+            if (edMobSkel) edMobSkel.classList.add('hidden');
           }
         });
         generateEmbedSnippets(v);

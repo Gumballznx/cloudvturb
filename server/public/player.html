@@ -24,6 +24,13 @@
       flex-direction: column;
       overflow: hidden;
     }
+    html.is-preview, html.is-preview body, html.is-preview .player-wrapper {
+      background-color: transparent !important;
+    }
+    html.is-preview.is-ready, html.is-preview.is-ready body, html.is-preview.is-ready .player-wrapper {
+      background-color: #000 !important;
+      transition: background-color 0.35s ease;
+    }
     .player-wrapper {
       position: relative;
       width: 100%;
@@ -672,6 +679,9 @@
       const vidId = params.get('id') || pathnameId || '';
       const tokenParam = params.get('token') || '';
       const isPreview = params.get('preview') === '1';
+      if (isPreview) {
+        document.documentElement.classList.add('is-preview');
+      }
       const posterParam = params.get('poster') || params.get('thumb') || '';
       let videoSrc = params.get('v') || '';
       let hlsSrc = '';
@@ -782,6 +792,9 @@
             }
             if (data.title) {
               document.title = data.title;
+            }
+            if (isPreview) {
+              document.documentElement.classList.add('is-ready');
             }
           }
         } catch (e) {}

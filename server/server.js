@@ -123,6 +123,7 @@ db.exec(`
     file_size INTEGER DEFAULT 0,
     plays INTEGER DEFAULT 0,
     settings_json TEXT,
+    status TEXT DEFAULT 'ready',
     deleted_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -359,6 +360,7 @@ try { db.exec("ALTER TABLE videos ADD COLUMN hls_manifest TEXT DEFAULT NULL"); }
 try { db.exec("ALTER TABLE videos ADD COLUMN smartautoplay_url TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_at DATETIME DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_reason TEXT DEFAULT NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN status TEXT DEFAULT 'ready'"); } catch (e) {}
 try { db.exec("ALTER TABLE api_keys ADD COLUMN token TEXT"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder_id)"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_deleted ON videos(deleted_at)"); } catch (e) {}
@@ -687,7 +689,12 @@ function processVideoHLS(vidId) {
       }
     }
   }
-  if (!inputPath || !fs.existsSync(inputPath)) return;
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+    return;
+  }
+
+  try { db.prepare("UPDATE videos SET status = 'optimizing' WHERE id = ?").run(vidId); } catch (e) {}
 
   const realDuration = getVideoDurationFormatted(inputPath);
   if (realDuration && (v.duration === '10:00' || v.duration === '05:00' || !v.duration)) {
@@ -746,7 +753,9 @@ function processVideoHLS(vidId) {
 
   try {
     const apProc = spawn('ffmpeg', apArgs);
-    apProc.on('error', () => {});
+    apProc.on('error', () => {
+      try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+    });
     apProc.on('close', (apCode) => {
       if (apCode === 0 && fs.existsSync(smartautoplayPath)) {
         const smartUrl = `/videos/${vidId}/smartautoplay-0s.mp4`;
@@ -789,6 +798,7 @@ function processVideoHLS(vidId) {
       try {
         const hlsProc = spawn('ffmpeg', hlsArgs);
         hlsProc.on('error', () => {
+          try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
           dispatchWebhookEvent(v.user_id, 'video.failed', {
             video_id: vidId,
             name: v.title || '',
@@ -799,7 +809,7 @@ function processVideoHLS(vidId) {
           if (hlsCode === 0 && fs.existsSync(masterPlaylistPath)) {
             const manifestUrl = `/videos/${vidId}/main.m3u8`;
             try {
-              db.prepare('UPDATE videos SET hls_ready = 1, hls_manifest = ? WHERE id = ?').run(manifestUrl, vidId);
+              db.prepare("UPDATE videos SET status = 'ready', hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
             } catch (e) {}
             dispatchWebhookEvent(v.user_id, 'video.ready', {
               video_id: vidId,
@@ -807,6 +817,7 @@ function processVideoHLS(vidId) {
               hls_manifest: manifestUrl
             });
           } else {
+            try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
             dispatchWebhookEvent(v.user_id, 'video.failed', {
               video_id: vidId,
               name: v.title || '',
@@ -814,23 +825,27 @@ function processVideoHLS(vidId) {
             });
           }
         });
-      } catch (hlsErr) {}
+      } catch (hlsErr) {
+        try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+      }
     });
-  } catch (err) {}
+  } catch (err) {
+    try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+  }
 }
 
 function autoCheckPendingHls() {
   try {
-    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest FROM videos WHERE deleted_at IS NULL").all();
+    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest, status FROM videos WHERE deleted_at IS NULL").all();
     for (const v of allVids) {
       const videoDir = path.join(VIDEOS_DIR, v.id);
       const masterPlaylist = path.join(videoDir, 'main.m3u8');
       if (fs.existsSync(masterPlaylist)) {
-        if (!v.hls_ready) {
+        if (!v.hls_ready || v.status === 'optimizing') {
           const manifestUrl = `/videos/${v.id}/main.m3u8`;
-          db.prepare('UPDATE videos SET hls_ready = 1, hls_manifest = ? WHERE id = ?').run(manifestUrl, v.id);
+          db.prepare("UPDATE videos SET status = 'ready', hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
         }
-      } else {
+      } else if (v.status === 'optimizing') {
         processVideoHLS(v.id);
       }
 
@@ -950,8 +965,16 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   }
 }
 
-const ALLOWED_MIME_TYPES = ['video/mp4', 'video/webm'];
-const ALLOWED_EXTS = ['.mp4', '.webm'];
+const ALLOWED_MIME_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-matroska',
+  'video/avi',
+  'video/x-msvideo',
+  'video/x-m4v'
+];
+const ALLOWED_EXTS = ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.m4v'];
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -969,8 +992,10 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 * 1024 },
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname || '').toLowerCase();
-    if (!ALLOWED_EXTS.includes(ext) || !ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new Error('Formato inválido. Apenas vídeos MP4 e WebM são aceitos.'));
+    const isMimeVideo = file.mimetype && (file.mimetype.startsWith('video/') || ALLOWED_MIME_TYPES.includes(file.mimetype));
+    const isExtVideo = ALLOWED_EXTS.includes(ext);
+    if (!isExtVideo && !isMimeVideo) {
+      return cb(new Error('Formato de arquivo inválido. Apenas vídeos (.mp4, .mov, .webm, .mkv, .avi, .m4v) são aceitos.'));
     }
     cb(null, true);
   }
@@ -3193,9 +3218,10 @@ app.post('/api/videos', authMiddleware, (req, res) => {
     resolvedDuration = getVideoDurationFormatted(filePath);
   }
 
+  const initialStatus = sourceType === 'local' ? 'optimizing' : 'ready';
   db.prepare(`
-    INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     vidId,
     req.user.id,
@@ -3206,7 +3232,8 @@ app.post('/api/videos', authMiddleware, (req, res) => {
     resolvedSize,
     cleanUrl,
     resolvedDuration || null,
-    JSON.stringify(settings || {})
+    JSON.stringify(settings || {}),
+    initialStatus
   );
 
   if (sourceType === 'local' && filePath) {
@@ -3281,14 +3308,39 @@ app.patch('/api/videos/:id/restore', authMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/api/videos/:id', authMiddleware, (req, res) => {
+  const vidId = req.params.id;
+  const v = db.prepare('SELECT * FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId);
+  if (!v) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (req.user.role !== 'owner' && v.user_id !== req.user.id) return res.status(403).json({ error: 'Permissão negada.' });
+
+  let settings = {};
+  try { settings = v.settings_json ? JSON.parse(v.settings_json) : {}; } catch (e) {}
+  const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
+  const posterPath = path.join(VIDEOS_DIR, v.id, 'poster.jpg');
+  const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${v.id}/poster.jpg` : (settings.thumbnailUrl || (v.video_url ? `${v.video_url}#t=0.5` : null));
+
+  res.json({
+    video: {
+      ...v,
+      settings,
+      poster_url: posterUrl,
+      thumbnail: posterUrl
+    }
+  });
+});
+
 const updateVideoHandler = (req, res) => {
   const { title, settings, duration, folderId } = req.body;
   const vidId = req.params.id;
 
-  const existing = db.prepare('SELECT user_id FROM videos WHERE id = ?').get(vidId);
+  const existing = db.prepare('SELECT user_id, status FROM videos WHERE id = ?').get(vidId);
   if (!existing) return res.status(404).json({ error: 'Vídeo não encontrado.' });
   if (req.user.role !== 'owner' && existing.user_id !== req.user.id) {
     return res.status(403).json({ error: 'Permissão negada.' });
+  }
+  if (existing.status === 'optimizing') {
+    return res.status(400).json({ error: 'Este vídeo ainda está sendo otimizado. Aguarde a conclusão para editá-lo.' });
   }
 
   let cleanFolderId = existing.folder_id;
@@ -4686,15 +4738,6 @@ app.post('/api/upload', authMiddleware, checkStorageQuotaPre, (req, res) => {
       return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
     }
 
-    const fastPath = originalPath + '.fast.mp4';
-    try {
-      execSync(`ffmpeg -y -i "${originalPath}" -c copy -movflags +faststart "${fastPath}"`, { timeout: 30000 });
-      if (fs.existsSync(fastPath)) {
-        fs.unlinkSync(originalPath);
-        fs.renameSync(fastPath, originalPath);
-      }
-    } catch (ffmpegErr) {}
-
     const finalStat = fs.statSync(originalPath);
 
     if (!isOwner && (userUsed + finalStat.size > MEMBER_STORAGE_LIMIT_BYTES)) {
@@ -4752,6 +4795,9 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
     }
 
     const meta = await metaRes.json();
+    if (meta.mimeType && !meta.mimeType.startsWith('video/')) {
+      return res.status(400).json({ error: 'O arquivo selecionado no Google Drive não é um vídeo válido.' });
+    }
     const declaredSize = parseInt(meta.size || '0', 10);
 
     if (!isOwner && declaredSize > 0 && (userUsed + declaredSize > MEMBER_STORAGE_LIMIT_BYTES)) {
@@ -4784,15 +4830,6 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
       try { fs.unlinkSync(targetPath); } catch (e) {}
       return res.status(400).json({ error: 'Cota individual de 3 GB excedida para este vídeo.' });
     }
-
-    const fastPath = targetPath + '.fast.mp4';
-    try {
-      execSync(`ffmpeg -y -i "${targetPath}" -c copy -movflags +faststart "${fastPath}"`, { timeout: 30000 });
-      if (fs.existsSync(fastPath)) {
-        fs.unlinkSync(targetPath);
-        fs.renameSync(fastPath, targetPath);
-      }
-    } catch (ffmpegErr) {}
 
     const host = req.get('host') || '';
     const isProd = host.includes(BASE_DOMAIN);
@@ -4831,8 +4868,8 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
     const realDuration = getVideoDurationFormatted(targetPath);
 
     db.prepare(`
-      INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       vidId,
       req.user.id,
@@ -4843,7 +4880,8 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
       finalStat.size,
       videoUrl,
       realDuration || null,
-      JSON.stringify(defaultSettings)
+      JSON.stringify(defaultSettings),
+      'optimizing'
     );
 
     processVideoHLS(vidId);

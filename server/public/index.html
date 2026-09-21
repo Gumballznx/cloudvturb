@@ -535,6 +535,7 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    .spin-icon { animation: spin 0.9s linear infinite; }
 
     .sidebar-profile-container {
       position: relative;
@@ -6968,7 +6969,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
       </div>
       <div class="modal-body-clean">
         <div class="import-drop-zone" id="importDropZone">
-          <input type="file" id="newVidFile" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" style="display: none;">
+          <input type="file" id="newVidFile" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/avi,video/x-msvideo,video/x-m4v,.mp4,.webm,.mov,.mkv,.avi,.m4v" style="display: none;">
           <div class="import-cloud-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
@@ -7145,7 +7146,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
         </div>
 
         <div class="import-drop-zone" id="onbImportDropZone">
-          <input type="file" id="onbVidFile" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" style="display: none;">
+          <input type="file" id="onbVidFile" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/avi,video/x-msvideo,video/x-m4v,.mp4,.webm,.mov,.mkv,.avi,.m4v" style="display: none;">
           <div class="import-cloud-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
@@ -9909,6 +9910,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         videos = vData.videos || [];
         renderVideosGrid();
         renderOverviewRecent();
+        if (videos.some(v => v.status === 'optimizing')) {
+          startOptimizingPoller();
+        }
         populateAnalyticsSelector();
         const activeAnalyticsTab = document.getElementById('viewAnalytics');
         if (activeAnalyticsTab && activeAnalyticsTab.classList.contains('active')) {
@@ -9934,6 +9938,33 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       } catch (err) {
         console.error('Falha ao carregar métricas:', err);
       }
+    }
+
+    let optimizingPollInterval = null;
+
+    function startOptimizingPoller() {
+      if (optimizingPollInterval) return;
+      optimizingPollInterval = setInterval(async () => {
+        try {
+          const res = await api('/api/videos');
+          const latestVideos = res.videos || [];
+          const hadOptimizing = (videos || []).some(v => v.status === 'optimizing');
+
+          videos = latestVideos;
+          renderVideosGrid();
+          renderOverviewRecent();
+
+          const stillOptimizing = latestVideos.some(v => v.status === 'optimizing');
+          if (hadOptimizing && !stillOptimizing) {
+            showToast('Otimização concluída com sucesso!');
+            clearInterval(optimizingPollInterval);
+            optimizingPollInterval = null;
+          } else if (!stillOptimizing) {
+            clearInterval(optimizingPollInterval);
+            optimizingPollInterval = null;
+          }
+        } catch (e) {}
+      }, 4000);
     }
 
     function switchLibrarySubtab(subtab, updateUrl = true) {
@@ -10483,6 +10514,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       closeAllVslMenus();
       if (!vidId) return;
 
+      const v = (videos || []).find(x => x.id === vidId) || (topVideos || []).find(x => x.id === vidId);
+      if (v && v.status === 'optimizing') {
+        if (['edit', 'embed', 'download', 'open_tab', 'duplicate'].includes(action)) {
+          showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão do processamento.', true);
+          return;
+        }
+      }
+
       if (action === 'edit') openEditor(vidId);
       else if (action === 'analytics') openVideoAnalytics(vidId);
       else if (action === 'embed') openEmbedModal(vidId);
@@ -10756,6 +10795,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    function isVideoFile(file) {
+      if (!file) return false;
+      const ALLOWED_VIDEO_EXTS = ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.m4v'];
+      const ext = file.name ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : '';
+      const isVideoMime = file.type ? file.type.startsWith('video/') : false;
+      return isVideoMime || ALLOWED_VIDEO_EXTS.includes(ext);
+    }
+
     function setupOnboardingDropZoneEvents() {
       const dropZone = document.getElementById('onbImportDropZone');
       const fileInput = document.getElementById('onbVidFile');
@@ -10786,8 +10833,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         e.preventDefault();
         dropZone.classList.remove('dragover');
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const droppedFile = e.dataTransfer.files[0];
+          if (!isVideoFile(droppedFile)) {
+            showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
+            return;
+          }
           fileInput.files = e.dataTransfer.files;
-          handleOnbLocalFileSelected(fileInput.files[0]);
+          handleOnbLocalFileSelected(droppedFile);
         }
       });
 
@@ -10800,6 +10852,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function handleOnbLocalFileSelected(file) {
       if (!file) return;
+      if (!isVideoFile(file)) {
+        showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
+        const fileInput = document.getElementById('onbVidFile');
+        if (fileInput) fileInput.value = '';
+        const infoBox = document.getElementById('onbSelectedFileInfo');
+        if (infoBox) infoBox.style.display = 'none';
+        return;
+      }
       const titleInput = document.getElementById('onbVidTitle');
       if (titleInput && !titleInput.value.trim()) {
         titleInput.value = file.name.replace(/\.[^/.]+$/, '');
@@ -10985,6 +11045,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
 
       const file = fileInput.files[0];
+      if (!isVideoFile(file)) {
+        showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v).', true);
+        return;
+      }
       const formData = new FormData();
       formData.append('videoFile', file);
 
@@ -11171,22 +11235,28 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function createVideoCardElement(v) {
       const plays = (v.plays || 0).toLocaleString();
       const pitchSec = v.settings && v.settings.ctaTime ? `${v.settings.ctaTime}s pitch` : 'Sem CTA';
+      const isOptimizing = v.status === 'optimizing';
 
       const el = document.createElement('div');
-      el.className = 'video-card';
+      el.className = 'video-card' + (isOptimizing ? ' is-optimizing' : '');
       el.innerHTML = `
         <div class="video-thumb-stage">
           <video src="${v.video_url ? v.video_url + '#t=0.5' : ''}" preload="metadata" muted playsinline onerror="this.remove()"></video>
-          ${v.blocked_at ? `<div class="thumb-badge-source" style="background:#ef4444;color:#fff;" title="Bloqueado: ${escapeHtml(v.blocked_reason || '')}">Bloqueado</div>` : ''}
+          ${isOptimizing ? `
+            <div class="thumb-badge-optimizing" style="background:#f59e0b;color:#1e1b4b;font-weight:700;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:6px;font-size:11px;position:absolute;top:8px;left:8px;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,0.35);">
+              <svg class="spin-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round"></circle></svg>
+              Otimizando...
+            </div>
+          ` : (v.blocked_at ? `<div class="thumb-badge-source" style="background:#ef4444;color:#fff;" title="Bloqueado: ${escapeHtml(v.blocked_reason || '')}">Bloqueado</div>` : '')}
           ${v.duration ? `<div class="thumb-badge-duration">${escapeHtml(v.duration)}</div>` : ''}
-          <div class="thumb-play-hover" onclick="openPlayerDetails('${v.id}')">
+          <div class="thumb-play-hover" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão.', true)` : `openPlayerDetails('${v.id}')`}">
             <div class="play-circle-btn">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </div>
           </div>
         </div>
         <div class="video-card-body">
-          <div class="video-card-title" onclick="openPlayerDetails('${v.id}')" title="${escapeHtml(v.title)}">${escapeHtml(v.title)}</div>
+          <div class="video-card-title" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão.', true)` : `openPlayerDetails('${v.id}')`}" title="${escapeHtml(v.title)}" style="${isOptimizing ? 'cursor:not-allowed;opacity:0.85;' : ''}">${escapeHtml(v.title)}</div>
           <div class="video-stats-row">
             <div class="video-stats-item">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z"/></svg>
@@ -11198,10 +11268,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             </div>
           </div>
           <div class="video-card-actions">
-            <button type="button" class="btn-vsl-action" onclick="openVideoAnalytics('${v.id}')" title="Ver Analytics">
+            <button type="button" class="btn-vsl-action" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado.', true)` : `openVideoAnalytics('${v.id}')`}" title="Ver Analytics" ${isOptimizing ? 'style="opacity:0.4;cursor:not-allowed;"' : ''}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
             </button>
-            <button type="button" class="btn-vsl-action" onclick="openEmbedModal('${v.id}')" title="Copiar código embed">
+            <button type="button" class="btn-vsl-action" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado. Aguarde para copiar o embed.', true)` : `openEmbedModal('${v.id}')`}" title="Copiar código embed" ${isOptimizing ? 'style="opacity:0.4;cursor:not-allowed;"' : ''}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
             </button>
             <button type="button" class="btn-vsl-action btn-dots" onclick="toggleVslDropdownMenu(event, '${v.id}')" title="Mais Opções">
@@ -13680,6 +13750,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         }
       }
       if (!v) return;
+      if (v.status === 'optimizing') {
+        showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão para editá-lo.', true);
+        return;
+      }
 
       document.body.classList.remove('is-player-details-mode');
       document.body.classList.add('is-editor-mode');
@@ -13779,6 +13853,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         }
       }
       if (!v) return;
+      if (v.status === 'optimizing') {
+        showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão do processamento.', true);
+        return;
+      }
 
       document.body.classList.remove('is-editor-mode');
       document.body.classList.add('is-player-details-mode');
@@ -14384,6 +14462,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (!currentEditingVideoId) return;
       const v = videos.find(x => x.id === currentEditingVideoId) || (topVideos && topVideos.find(x => x.id === currentEditingVideoId));
       if (!v) return;
+      if (v.status === 'optimizing') {
+        showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão para obter o código embed.', true);
+        return;
+      }
 
       const respSwitch = document.getElementById('embedResponsiveSwitch');
       if (respSwitch) respSwitch.checked = false;
@@ -14678,8 +14760,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         e.preventDefault();
         dropZone.classList.remove('dragover');
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const droppedFile = e.dataTransfer.files[0];
+          if (!isVideoFile(droppedFile)) {
+            showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
+            return;
+          }
           fileInput.files = e.dataTransfer.files;
-          handleLocalFileSelected(fileInput.files[0]);
+          handleLocalFileSelected(droppedFile);
         }
       });
 
@@ -14695,13 +14782,18 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const clipboardItems = (e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData))?.items;
         if (!clipboardItems) return;
         for (let item of clipboardItems) {
-          if (item.kind === 'file' && item.type.startsWith('video/')) {
-            const blob = item.getAsFile();
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(blob);
-            fileInput.files = dataTransfer.files;
-            handleLocalFileSelected(blob);
-            break;
+          if (item.kind === 'file') {
+            if (item.type.startsWith('video/')) {
+              const blob = item.getAsFile();
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(blob);
+              fileInput.files = dataTransfer.files;
+              handleLocalFileSelected(blob);
+              break;
+            } else if (item.type.startsWith('image/')) {
+              showToast('Imagens não são permitidas. Por favor, cole um arquivo de vídeo.', true);
+              break;
+            }
           }
         }
       });
@@ -14709,6 +14801,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function handleLocalFileSelected(file) {
       if (!file) return;
+      if (!isVideoFile(file)) {
+        showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
+        const fileInput = document.getElementById('newVidFile');
+        if (fileInput) fileInput.value = '';
+        const infoBox = document.getElementById('selectedFileInfo');
+        if (infoBox) infoBox.style.display = 'none';
+        return;
+      }
       const titleInput = document.getElementById('newVidTitle');
       if (titleInput && !titleInput.value.trim()) {
         titleInput.value = file.name.replace(/\.[^/.]+$/, '');
@@ -14721,7 +14821,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         sizeLabel.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
         infoBox.style.display = 'block';
       }
-      showToast(`Arquivo "${file.name}" selecionado! Clique em Salvar e Abrir Editor.`);
+      showToast(`Arquivo "${file.name}" selecionado! Clique em Salvar e Importar.`);
     }
 
     function openGoogleDrivePicker() {
@@ -14838,13 +14938,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
         if (progressBar) progressBar.style.width = '100%';
         if (percentLabel) percentLabel.textContent = '100%';
-        showToast('Vídeo do Google Drive importado com sucesso!');
         closeNewVideoModal();
         await loadAllDashboardData();
         navigateTo('videos');
-        if (res.id) {
-          openEditor(res.id);
-        }
+        startOptimizingPoller();
+        showToast('Vídeo do Google Drive importado! A otimização foi iniciada em segundo plano.');
       } catch (err) {
         showToast(err.message || 'Erro na importação do Google Drive.', true);
       } finally {
@@ -14873,10 +14971,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (fileInput && fileInput.files && fileInput.files.length > 0) {
         sourceType = 'local';
         const file = fileInput.files[0];
+        if (!isVideoFile(file)) {
+          showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
+          return;
+        }
         const formData = new FormData();
         formData.append('videoFile', file);
 
-        setButtonLoading(btn, true, 'Enviando e Otimizando...');
+        setButtonLoading(btn, true, 'Enviando vídeo...');
         const statusText = document.getElementById('uploadStatusText');
         const progressDiv = document.getElementById('uploadStatusProgress');
         const progressBar = document.getElementById('uploadProgressBar');
@@ -14896,6 +14998,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
                 const pct = Math.round((e.loaded / e.total) * 100);
                 if (progressBar) progressBar.style.width = pct + '%';
                 if (percentLabel) percentLabel.textContent = pct + '%';
+                if (statusText) statusText.textContent = `Enviando vídeo... ${pct}%`;
               }
             };
 
@@ -14923,6 +15026,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         } catch (err) {
           showToast(err.message, true);
           setButtonLoading(btn, false);
+          if (progressDiv) progressDiv.style.display = 'none';
           return;
         }
       } else if (remoteUrl) {
@@ -14967,12 +15071,20 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
         closeNewVideoModal();
         await loadAllDashboardData();
-        openEditor(res.id);
-        showToast('VSL adicionada com sucesso!');
+        if (sourceType === 'local') {
+          showToast('Vídeo enviado com sucesso! A otimização foi iniciada em segundo plano.');
+          navigateTo('videos');
+          startOptimizingPoller();
+        } else {
+          showToast('VSL adicionada com sucesso!');
+          openEditor(res.id);
+        }
       } catch (err) {
         showToast(err.message, true);
       } finally {
         setButtonLoading(btn, false);
+        const progressDiv = document.getElementById('uploadStatusProgress');
+        if (progressDiv) progressDiv.style.display = 'none';
       }
     }
 

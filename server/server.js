@@ -373,16 +373,27 @@ try {
 } catch (e) {}
 
 try {
-  const localVids = db.prepare("SELECT id, file_path, file_size, duration FROM videos WHERE source_type = 'local'").all();
+  const localVids = db.prepare("SELECT id, file_path, file_size, duration, video_url FROM videos WHERE source_type = 'local'").all();
   for (const v of localVids) {
-    if (v.file_path && fs.existsSync(v.file_path)) {
+    let fPath = v.file_path;
+    if (!fPath || !fs.existsSync(fPath)) {
+      if (fPath) {
+        const altPath = path.join(VIDEOS_DIR, path.basename(fPath));
+        if (fs.existsSync(altPath)) fPath = altPath;
+      }
+      if ((!fPath || !fs.existsSync(fPath)) && v.video_url) {
+        const candidate = path.join(VIDEOS_DIR, path.basename(v.video_url));
+        if (fs.existsSync(candidate)) fPath = candidate;
+      }
+    }
+    if (fPath && fs.existsSync(fPath)) {
       try {
-        const realSize = fs.statSync(v.file_path).size;
+        const realSize = fs.statSync(fPath).size;
         if (!v.file_size || v.file_size !== realSize) {
           db.prepare("UPDATE videos SET file_size = ? WHERE id = ?").run(realSize, v.id);
         }
         if (!v.duration || v.duration === '10:00' || v.duration === '05:00') {
-          const realDur = getVideoDurationFormatted(v.file_path);
+          const realDur = getVideoDurationFormatted(fPath);
           if (realDur) {
             db.prepare("UPDATE videos SET duration = ? WHERE id = ?").run(realDur, v.id);
           }
@@ -629,7 +640,16 @@ function getUsedStorageBytes() {
 
 function getUserStorageBytes(userId) {
   try {
-    const row = db.prepare("SELECT COALESCE(SUM(file_size), 0) as total FROM videos WHERE user_id = ? AND source_type = 'local'").get(userId);
+    const row = db.prepare("SELECT COALESCE(SUM(file_size), 0) as total FROM videos WHERE user_id = ? AND (source_type = 'local' OR file_size > 0)").get(userId);
+    return row ? row.total : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function getTotalVideosStorageBytes() {
+  try {
+    const row = db.prepare("SELECT COALESCE(SUM(file_size), 0) as total FROM videos WHERE source_type = 'local' OR file_size > 0").get();
     return row ? row.total : 0;
   } catch (e) {
     return 0;
@@ -1970,7 +1990,7 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
   const requireApproval = isOwner ? (getSetting('require_approval', '1') === '1') : false;
 
   if (isOwner) {
-    const usedBytes = getUsedStorageBytes();
+    const usedBytes = getTotalVideosStorageBytes();
     const totalBytes = SERVER_STORAGE_LIMIT_BYTES;
     const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
     return res.json({
@@ -2700,26 +2720,33 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
 
   try {
     const localVideos = isOwner
-      ? db.prepare("SELECT id, file_path, file_size, duration FROM videos WHERE source_type = 'local'").all()
-      : db.prepare("SELECT id, file_path, file_size, duration FROM videos WHERE user_id = ? AND source_type = 'local'").all(req.user.id);
+      ? db.prepare("SELECT id, file_path, file_size, duration, video_url FROM videos WHERE source_type = 'local'").all()
+      : db.prepare("SELECT id, file_path, file_size, duration, video_url FROM videos WHERE user_id = ? AND source_type = 'local'").all(req.user.id);
     for (const lv of localVideos) {
       let fPath = lv.file_path;
-      if (fPath && !fs.existsSync(fPath)) {
-        const altPath = path.join(VIDEOS_DIR, path.basename(fPath));
-        if (fs.existsSync(altPath)) fPath = altPath;
+      if (!fPath || !fs.existsSync(fPath)) {
+        if (fPath) {
+          const altPath = path.join(VIDEOS_DIR, path.basename(fPath));
+          if (fs.existsSync(altPath)) fPath = altPath;
+        }
+        if ((!fPath || !fs.existsSync(fPath)) && lv.video_url) {
+          const candidate = path.join(VIDEOS_DIR, path.basename(lv.video_url));
+          if (fs.existsSync(candidate)) fPath = candidate;
+        }
       }
       let currentSize = 0;
       if (fPath && fs.existsSync(fPath)) {
         try { currentSize = fs.statSync(fPath).size; } catch (e) {}
-      }
-      const hlsDir = path.join(VIDEOS_DIR, lv.id);
-      if (fs.existsSync(hlsDir)) {
-        try {
-          const subFiles = fs.readdirSync(hlsDir);
-          for (const sf of subFiles) {
-            try { currentSize += fs.statSync(path.join(hlsDir, sf)).size; } catch (e) {}
-          }
-        } catch (e) {}
+      } else {
+        const hlsDir = path.join(VIDEOS_DIR, lv.id);
+        if (fs.existsSync(hlsDir)) {
+          try {
+            const subFiles = fs.readdirSync(hlsDir);
+            for (const sf of subFiles) {
+              try { currentSize += fs.statSync(path.join(hlsDir, sf)).size; } catch (e) {}
+            }
+          } catch (e) {}
+        }
       }
 
       if (currentSize > 0 && lv.file_size !== currentSize) {
@@ -2764,7 +2791,7 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
   }
 
   const totalLimitBytes = isOwner ? SERVER_STORAGE_LIMIT_BYTES : MEMBER_STORAGE_LIMIT_BYTES;
-  const usedBytes = isOwner ? getUsedStorageBytes() : getUserStorageBytes(req.user.id);
+  const usedBytes = isOwner ? getTotalVideosStorageBytes() : getUserStorageBytes(req.user.id);
   const freeBytes = Math.max(0, totalLimitBytes - usedBytes);
   const percent = totalLimitBytes > 0 ? (usedBytes / totalLimitBytes) * 100 : 0;
 
@@ -3999,7 +4026,7 @@ app.get('/api/analytics/overview', authMiddleware, (req, res) => {
   const conversionRate = totalPlays > 0 ? ((ctaClicks / totalPlays) * 100).toFixed(1) : '0.0';
 
   const isOwner = req.user.role === 'owner';
-  const usedBytes = isOwner ? getUsedStorageBytes() : getUserStorageBytes(req.user.id);
+  const usedBytes = isOwner ? getTotalVideosStorageBytes() : getUserStorageBytes(req.user.id);
   const totalBytes = isOwner ? SERVER_STORAGE_LIMIT_BYTES : MEMBER_STORAGE_LIMIT_BYTES;
 
   res.json({

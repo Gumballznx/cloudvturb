@@ -27,9 +27,9 @@
     html.is-preview, html.is-preview body, html.is-preview .player-wrapper {
       background-color: transparent !important;
     }
-    html.is-preview.is-ready, html.is-preview.is-ready body, html.is-preview.is-ready .player-wrapper {
-      background-color: #000 !important;
-      transition: background-color 0.35s ease;
+    html.theme-light, html.theme-light body {
+      background-color: #f8fafc !important;
+      color: #0f172a;
     }
     .player-wrapper {
       position: relative;
@@ -39,8 +39,61 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #000;
+      background: #020617;
       overflow: hidden;
+    }
+    html.theme-light .player-wrapper {
+      background: #f1f5f9;
+    }
+    .player-skeleton {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      background: #090d16;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+      pointer-events: none;
+    }
+    html.theme-light .player-skeleton {
+      background: #e2e8f0;
+    }
+    .player-skeleton.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+    .player-skeleton-shimmer {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
+      background-size: 200% 100%;
+      animation: playerShimmerAnim 1.8s infinite ease-in-out;
+    }
+    html.theme-light .player-skeleton-shimmer {
+      background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.05) 50%, transparent 100%);
+      background-size: 200% 100%;
+    }
+    @keyframes playerShimmerAnim {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .player-skeleton-pulse {
+      position: relative;
+      z-index: 2;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    html.theme-light .player-skeleton-pulse {
+      background: rgba(0, 0, 0, 0.06);
+      color: rgba(0, 0, 0, 0.4);
     }
     .player-poster {
       position: absolute;
@@ -582,6 +635,12 @@
 <body>
   <div class="player-wrapper" id="playerWrapper">
     <div class="player-poster" id="playerPoster"></div>
+    <div class="player-skeleton" id="playerSkeleton">
+      <div class="player-skeleton-shimmer"></div>
+      <div class="player-skeleton-pulse">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+      </div>
+    </div>
     <video id="videoElement" playsinline webkit-playsinline preload="auto" disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
     <div class="playback-shield" id="playbackShield"></div>
 
@@ -679,6 +738,12 @@
       const vidId = params.get('id') || pathnameId || '';
       const tokenParam = params.get('token') || '';
       const isPreview = params.get('preview') === '1';
+      const themeParam = params.get('theme') || '';
+      if (themeParam === 'light') {
+        document.documentElement.classList.add('theme-light');
+      } else if (themeParam === 'dark') {
+        document.documentElement.classList.add('theme-dark');
+      }
       if (isPreview) {
         document.documentElement.classList.add('is-preview');
       }
@@ -929,14 +994,24 @@
       const playPauseIndicator = document.getElementById('playPauseIndicator');
       const playPauseIcon = document.getElementById('playPauseIcon');
 
-      function hidePoster() {
+      function hideSkeletonAndPoster() {
+        const skel = document.getElementById('playerSkeleton');
+        if (skel && !skel.classList.contains('hidden')) {
+          skel.classList.add('hidden');
+        }
         if (playerPoster && !playerPoster.classList.contains('hidden')) {
           playerPoster.classList.add('hidden');
         }
       }
-      video.addEventListener('playing', hidePoster);
+      video.addEventListener('playing', hideSkeletonAndPoster);
+      video.addEventListener('canplay', function () {
+        const skel = document.getElementById('playerSkeleton');
+        if (skel && !skel.classList.contains('hidden') && video.readyState >= 2) {
+          skel.classList.add('hidden');
+        }
+      });
       video.addEventListener('timeupdate', function () {
-        if (video.currentTime > 0.05) hidePoster();
+        if (video.currentTime > 0.05) hideSkeletonAndPoster();
       });
 
       let hasUserUnmuted = false;
@@ -945,7 +1020,7 @@
       function applyAudioNoticeSettings(cfg) {
         if (!smartOverlay || !pulseBadge || !pulseIcon || (!overlayTextTop && !overlayText)) return;
 
-        if (cfg.enabled === false || hasSavedResume) {
+        if (isPreview || cfg.enabled === false || hasSavedResume) {
           smartOverlay.classList.add('hidden');
           return;
         } else if (!hasUserUnmuted) {
@@ -1345,9 +1420,9 @@
       }
 
       const primaryStream = hlsSrc || videoSrc;
-      const shouldUseTeaser = !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hasUserUnmuted;
+      const shouldUseTeaser = !isPreview && !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hasUserUnmuted;
 
-      if (hasSavedResume) {
+      if (hasSavedResume && !isPreview) {
         if (primaryStream) {
           if (primaryStream.includes('.m3u8')) {
             loadHlsStream(primaryStream, savedResumeTime, false, true);
@@ -1372,10 +1447,21 @@
         }
       } else if (primaryStream) {
         if (primaryStream.includes('.m3u8')) {
-          loadHlsStream(primaryStream, 0, !smartAutoplay, false);
+          loadHlsStream(primaryStream, 0, isPreview ? true : !smartAutoplay, false);
         } else {
           video.src = primaryStream;
-          startPlayback();
+          if (isPreview) {
+            video.muted = false;
+            const pp = video.play();
+            if (pp !== undefined) {
+              pp.catch(function () {
+                video.muted = true;
+                video.play().catch(function () {});
+              });
+            }
+          } else {
+            startPlayback();
+          }
         }
       }
 

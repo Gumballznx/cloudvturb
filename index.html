@@ -536,6 +536,44 @@
       to { transform: rotate(360deg); }
     }
     .spin-icon { animation: spin 0.9s linear infinite; }
+    @keyframes vturb-ring-spin {
+      0% { transform: rotate(-90deg); }
+      100% { transform: rotate(270deg); }
+    }
+    .thumb-optimizing-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.48);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 4;
+      border-radius: inherit;
+      cursor: not-allowed;
+    }
+    .vturb-progress-ring-container {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .vturb-progress-ring-svg {
+      transform: rotate(-90deg);
+      transform-origin: center;
+      animation: vturb-ring-spin 2.6s linear infinite;
+    }
+    .vturb-progress-ring-text {
+      position: absolute;
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      letter-spacing: -0.3px;
+      user-select: none;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+    }
 
     .sidebar-profile-container {
       position: relative;
@@ -9940,9 +9978,38 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    const videoProgressMap = {};
     let optimizingPollInterval = null;
+    let optimizingTickerInterval = null;
 
     function startOptimizingPoller() {
+      if (!optimizingTickerInterval) {
+        optimizingTickerInterval = setInterval(() => {
+          let hasActive = false;
+          (videos || []).forEach(v => {
+            if (v.status === 'optimizing') {
+              hasActive = true;
+              let cur = videoProgressMap[v.id] || (v.optimization_progress || 18);
+              if (cur < 94) {
+                cur += (95 - cur) * 0.08 + (Math.random() * 1.2);
+                videoProgressMap[v.id] = cur;
+                const textEl = document.getElementById(`ringText_${v.id}`);
+                const barEl = document.getElementById(`ringBar_${v.id}`);
+                if (textEl) textEl.textContent = `${Math.round(cur)}%`;
+                if (barEl) {
+                  const offset = (131.95 - (131.95 * (cur / 100))).toFixed(2);
+                  barEl.style.strokeDashoffset = `${offset}px`;
+                }
+              }
+            }
+          });
+          if (!hasActive && optimizingTickerInterval) {
+            clearInterval(optimizingTickerInterval);
+            optimizingTickerInterval = null;
+          }
+        }, 400);
+      }
+
       if (optimizingPollInterval) return;
       optimizingPollInterval = setInterval(async () => {
         try {
@@ -9951,20 +10018,37 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           const hadOptimizing = (videos || []).some(v => v.status === 'optimizing');
 
           videos = latestVideos;
+          const stillOptimizing = latestVideos.some(v => v.status === 'optimizing');
+
+          latestVideos.forEach(v => {
+            if (v.status !== 'optimizing' && videoProgressMap[v.id]) {
+              delete videoProgressMap[v.id];
+            } else if (v.status === 'optimizing' && v.optimization_progress) {
+              videoProgressMap[v.id] = Math.max(videoProgressMap[v.id] || 0, v.optimization_progress);
+            }
+          });
+
           renderVideosGrid();
           renderOverviewRecent();
 
-          const stillOptimizing = latestVideos.some(v => v.status === 'optimizing');
           if (hadOptimizing && !stillOptimizing) {
             showToast('Otimização concluída com sucesso!');
             clearInterval(optimizingPollInterval);
             optimizingPollInterval = null;
+            if (optimizingTickerInterval) {
+              clearInterval(optimizingTickerInterval);
+              optimizingTickerInterval = null;
+            }
           } else if (!stillOptimizing) {
             clearInterval(optimizingPollInterval);
             optimizingPollInterval = null;
+            if (optimizingTickerInterval) {
+              clearInterval(optimizingTickerInterval);
+              optimizingTickerInterval = null;
+            }
           }
         } catch (e) {}
-      }, 4000);
+      }, 3000);
     }
 
     function switchLibrarySubtab(subtab, updateUrl = true) {
@@ -11236,6 +11320,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const plays = (v.plays || 0).toLocaleString();
       const pitchSec = v.settings && v.settings.ctaTime ? `${v.settings.ctaTime}s pitch` : 'Sem CTA';
       const isOptimizing = v.status === 'optimizing';
+      const currentPct = isOptimizing ? Math.min(95, Math.max(15, Math.round(videoProgressMap[v.id] || v.optimization_progress || 18))) : 100;
+      if (isOptimizing && !videoProgressMap[v.id]) {
+        videoProgressMap[v.id] = currentPct;
+      }
+      const ringOffset = (131.95 - (131.95 * (currentPct / 100))).toFixed(2);
 
       const el = document.createElement('div');
       el.className = 'video-card' + (isOptimizing ? ' is-optimizing' : '');
@@ -11243,17 +11332,24 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         <div class="video-thumb-stage">
           <video src="${v.video_url ? v.video_url + '#t=0.5' : ''}" preload="metadata" muted playsinline onerror="this.remove()"></video>
           ${isOptimizing ? `
-            <div class="thumb-badge-optimizing" style="background:#f59e0b;color:#1e1b4b;font-weight:700;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:6px;font-size:11px;position:absolute;top:8px;left:8px;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,0.35);">
-              <svg class="spin-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round"></circle></svg>
-              Otimizando...
+            <div class="thumb-optimizing-overlay" onclick="showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão.', true)">
+              <div class="vturb-progress-ring-container" id="ringContainer_${v.id}">
+                <svg class="vturb-progress-ring-svg" width="52" height="52" viewBox="0 0 52 52">
+                  <circle cx="26" cy="26" r="21" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" fill="none" />
+                  <circle class="vturb-progress-ring-bar" id="ringBar_${v.id}" cx="26" cy="26" r="21" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" stroke-dasharray="131.95" stroke-dashoffset="${ringOffset}" style="transition: stroke-dashoffset 0.35s ease;" />
+                </svg>
+                <span class="vturb-progress-ring-text" id="ringText_${v.id}">${currentPct}%</span>
+              </div>
             </div>
           ` : (v.blocked_at ? `<div class="thumb-badge-source" style="background:#ef4444;color:#fff;" title="Bloqueado: ${escapeHtml(v.blocked_reason || '')}">Bloqueado</div>` : '')}
-          ${v.duration ? `<div class="thumb-badge-duration">${escapeHtml(v.duration)}</div>` : ''}
-          <div class="thumb-play-hover" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão.', true)` : `openPlayerDetails('${v.id}')`}">
-            <div class="play-circle-btn">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          ${v.duration && !isOptimizing ? `<div class="thumb-badge-duration">${escapeHtml(v.duration)}</div>` : ''}
+          ${!isOptimizing ? `
+            <div class="thumb-play-hover" onclick="openPlayerDetails('${v.id}')">
+              <div class="play-circle-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              </div>
             </div>
-          </div>
+          ` : ''}
         </div>
         <div class="video-card-body">
           <div class="video-card-title" onclick="${isOptimizing ? `showToast('Este vídeo ainda está sendo otimizado. Aguarde a conclusão.', true)` : `openPlayerDetails('${v.id}')`}" title="${escapeHtml(v.title)}" style="${isOptimizing ? 'cursor:not-allowed;opacity:0.85;' : ''}">${escapeHtml(v.title)}</div>

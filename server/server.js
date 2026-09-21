@@ -124,6 +124,7 @@ db.exec(`
     plays INTEGER DEFAULT 0,
     settings_json TEXT,
     status TEXT DEFAULT 'ready',
+    optimization_progress INTEGER DEFAULT 0,
     deleted_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -361,6 +362,7 @@ try { db.exec("ALTER TABLE videos ADD COLUMN smartautoplay_url TEXT DEFAULT NULL
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_at DATETIME DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_reason TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN status TEXT DEFAULT 'ready'"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN optimization_progress INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE api_keys ADD COLUMN token TEXT"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder_id)"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_deleted ON videos(deleted_at)"); } catch (e) {}
@@ -694,7 +696,7 @@ function processVideoHLS(vidId) {
     return;
   }
 
-  try { db.prepare("UPDATE videos SET status = 'optimizing' WHERE id = ?").run(vidId); } catch (e) {}
+  try { db.prepare("UPDATE videos SET status = 'optimizing', optimization_progress = 20 WHERE id = ?").run(vidId); } catch (e) {}
 
   const realDuration = getVideoDurationFormatted(inputPath);
   if (realDuration && (v.duration === '10:00' || v.duration === '05:00' || !v.duration)) {
@@ -703,7 +705,8 @@ function processVideoHLS(vidId) {
 
   dispatchWebhookEvent(v.user_id, 'video.processing', {
     video_id: vidId,
-    name: v.title || ''
+    name: v.title || '',
+    progress: 20
   });
 
   const videoDir = path.join(VIDEOS_DIR, vidId);
@@ -732,7 +735,7 @@ function processVideoHLS(vidId) {
       pProc.on('close', (pCode) => {
         if (pCode === 0 && fs.existsSync(posterPath)) {
           const posterUrl = `/videos/${vidId}/poster.jpg`;
-          try { db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(posterUrl, vidId); } catch (e) {}
+          try { db.prepare("UPDATE videos SET thumbnail = ?, optimization_progress = 45 WHERE id = ?").run(posterUrl, vidId); } catch (e) {}
         }
       });
     } catch (e) {}
@@ -754,12 +757,12 @@ function processVideoHLS(vidId) {
   try {
     const apProc = spawn('ffmpeg', apArgs);
     apProc.on('error', () => {
-      try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+      try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
     });
     apProc.on('close', (apCode) => {
       if (apCode === 0 && fs.existsSync(smartautoplayPath)) {
         const smartUrl = `/videos/${vidId}/smartautoplay-0s.mp4`;
-        try { db.prepare('UPDATE videos SET smartautoplay_url = ? WHERE id = ?').run(smartUrl, vidId); } catch (e) {}
+        try { db.prepare("UPDATE videos SET smartautoplay_url = ?, optimization_progress = 70 WHERE id = ?").run(smartUrl, vidId); } catch (e) {}
       }
 
       const filterComplex = '[0:v]split=3[v1][v2][v3]; [v1]scale=w=\'min(1280,iw)\':h=-2[v1out]; [v2]scale=w=\'min(854,iw)\':h=-2[v2out]; [v3]scale=w=\'min(640,iw)\':h=-2[v3out]';
@@ -798,7 +801,7 @@ function processVideoHLS(vidId) {
       try {
         const hlsProc = spawn('ffmpeg', hlsArgs);
         hlsProc.on('error', () => {
-          try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+          try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
           dispatchWebhookEvent(v.user_id, 'video.failed', {
             video_id: vidId,
             name: v.title || '',
@@ -809,7 +812,7 @@ function processVideoHLS(vidId) {
           if (hlsCode === 0 && fs.existsSync(masterPlaylistPath)) {
             const manifestUrl = `/videos/${vidId}/main.m3u8`;
             try {
-              db.prepare("UPDATE videos SET status = 'ready', hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
+              db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
             } catch (e) {}
             dispatchWebhookEvent(v.user_id, 'video.ready', {
               video_id: vidId,
@@ -817,7 +820,7 @@ function processVideoHLS(vidId) {
               hls_manifest: manifestUrl
             });
           } else {
-            try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+            try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
             dispatchWebhookEvent(v.user_id, 'video.failed', {
               video_id: vidId,
               name: v.title || '',
@@ -826,11 +829,11 @@ function processVideoHLS(vidId) {
           }
         });
       } catch (hlsErr) {
-        try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+        try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
       }
     });
   } catch (err) {
-    try { db.prepare("UPDATE videos SET status = 'ready' WHERE id = ?").run(vidId); } catch (e) {}
+    try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
   }
 }
 
@@ -3219,9 +3222,10 @@ app.post('/api/videos', authMiddleware, (req, res) => {
   }
 
   const initialStatus = sourceType === 'local' ? 'optimizing' : 'ready';
+  const initialProgress = sourceType === 'local' ? 15 : 100;
   db.prepare(`
-    INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status, optimization_progress)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     vidId,
     req.user.id,
@@ -3233,7 +3237,8 @@ app.post('/api/videos', authMiddleware, (req, res) => {
     cleanUrl,
     resolvedDuration || null,
     JSON.stringify(settings || {}),
-    initialStatus
+    initialStatus,
+    initialProgress
   );
 
   if (sourceType === 'local' && filePath) {
@@ -3495,6 +3500,35 @@ app.delete('/api/videos/:id/permanent', authMiddleware, (req, res) => {
   db.prepare('DELETE FROM analytics_events WHERE video_id = ?').run(vidId);
   db.prepare('DELETE FROM videos WHERE id = ?').run(vidId);
   res.json({ success: true, permanentlyDeleted: true });
+});
+
+app.delete('/api/videos/trash/empty', authMiddleware, (req, res) => {
+  const isOwner = req.user.role === 'owner';
+  const query = isOwner
+    ? 'SELECT id, source_type, file_path FROM videos WHERE deleted_at IS NOT NULL'
+    : 'SELECT id, source_type, file_path FROM videos WHERE deleted_at IS NOT NULL AND user_id = ?';
+  const trashItems = isOwner ? db.prepare(query).all() : db.prepare(query).all(req.user.id);
+
+  if (trashItems.length === 0) {
+    return res.json({ success: true, deletedCount: 0 });
+  }
+
+  for (const item of trashItems) {
+    if (item.source_type === 'local' && item.file_path && fs.existsSync(item.file_path)) {
+      try { fs.unlinkSync(item.file_path); } catch (e) {}
+    }
+    const hlsDir = path.join(VIDEOS_DIR, item.id);
+    if (fs.existsSync(hlsDir)) {
+      try { fs.rmSync(hlsDir, { recursive: true, force: true }); } catch (e) {}
+    }
+  }
+
+  const ids = trashItems.map(i => i.id);
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(`DELETE FROM analytics_events WHERE video_id IN (${placeholders})`).run(...ids);
+  db.prepare(`DELETE FROM videos WHERE id IN (${placeholders})`).run(...ids);
+
+  res.json({ success: true, deletedCount: trashItems.length });
 });
 
 app.post('/api/videos/:id/moderate', authMiddleware, async (req, res) => {
@@ -4868,8 +4902,8 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
     const realDuration = getVideoDurationFormatted(targetPath);
 
     db.prepare(`
-      INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status, optimization_progress)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       vidId,
       req.user.id,
@@ -4881,7 +4915,8 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
       videoUrl,
       realDuration || null,
       JSON.stringify(defaultSettings),
-      'optimizing'
+      'optimizing',
+      15
     );
 
     processVideoHLS(vidId);

@@ -3105,89 +3105,52 @@ app.delete('/api/folders/:id', authMiddleware, (req, res) => {
 });
 
 app.get('/api/videos', authMiddleware, (req, res) => {
-  const isTrash = req.query.trash === '1';
-  const folderId = req.query.folder_id;
+  try {
+    const isTrash = req.query.trash === '1';
+    const folderId = req.query.folder_id;
 
-  let query = 'SELECT * FROM videos WHERE ';
-  const params = [];
+    let query = 'SELECT * FROM videos WHERE ';
+    const params = [];
 
-  if (isTrash) {
-    query += 'deleted_at IS NOT NULL ';
-  } else {
-    query += 'deleted_at IS NULL ';
-  }
-
-  query += 'AND user_id = ? ';
-  params.push(req.user.id);
-
-  if (folderId) {
-    if (folderId === 'root') {
-      query += 'AND (folder_id IS NULL OR folder_id = "") ';
+    if (isTrash) {
+      query += 'deleted_at IS NOT NULL ';
     } else {
-      query += 'AND folder_id = ? ';
-      params.push(folderId);
+      query += 'deleted_at IS NULL ';
     }
+
+    query += 'AND user_id = ? ';
+    params.push(req.user.id);
+
+    if (folderId) {
+      if (folderId === 'root') {
+        query += 'AND (folder_id IS NULL OR folder_id = "") ';
+      } else {
+        query += 'AND folder_id = ? ';
+        params.push(folderId);
+      }
+    }
+
+    query += 'ORDER BY created_at DESC';
+
+    const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
+    const rows = db.prepare(query).all(...params);
+    const videos = rows.map(r => {
+      let settings = {};
+      try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
+      const posterPath = path.join(VIDEOS_DIR, r.id, 'poster.jpg');
+      const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${r.id}/poster.jpg` : (settings.thumbnailUrl || (r.video_url ? `${r.video_url}#t=0.5` : null));
+      return {
+        ...r,
+        settings,
+        poster_url: posterUrl,
+        thumbnail: posterUrl
+      };
+    });
+
+    res.json({ videos });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao listar vídeos.' });
   }
-
-  query += 'ORDER BY created_at DESC';
-
-  const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
-  const rows = db.prepare(query).all(...params);
-  const videos = rows.map(r => {
-    let settings = {};
-    try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
-    const posterPath = path.join(VIDEOS_DIR, r.id, 'poster.jpg');
-    const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${r.id}/poster.jpg` : (settings.thumbnailUrl || (r.video_url ? `${r.video_url}#t=0.5` : null));
-
-    let fileSize = Number(r.file_size || 0);
-    let resolvedPath = r.file_path;
-    if ((!resolvedPath || !fs.existsSync(resolvedPath)) && r.video_url) {
-      const candidate = path.join(VIDEOS_DIR, path.basename(r.video_url));
-      if (fs.existsSync(candidate)) resolvedPath = candidate;
-    }
-
-    if (fileSize === 0) {
-      if (resolvedPath && fs.existsSync(resolvedPath)) {
-        try { fileSize = fs.statSync(resolvedPath).size; } catch (e) {}
-      }
-      const hlsDir = path.join(VIDEOS_DIR, r.id);
-      if (fs.existsSync(hlsDir)) {
-        try {
-          const files = fs.readdirSync(hlsDir);
-          let hlsTotal = 0;
-          for (const f of files) {
-            try { hlsTotal += fs.statSync(path.join(hlsDir, f)).size; } catch (e) {}
-          }
-          if (hlsTotal > fileSize) fileSize = hlsTotal;
-        } catch (e) {}
-      }
-      if (fileSize > 0) {
-        try { db.prepare('UPDATE videos SET file_size = ? WHERE id = ?').run(fileSize, r.id); } catch (e) {}
-      }
-    }
-
-    let duration = r.duration;
-    if ((!duration || duration === '10:00' || duration === '05:00') && resolvedPath && fs.existsSync(resolvedPath)) {
-      try {
-        const probed = getVideoDurationFormatted(resolvedPath);
-        if (probed) {
-          duration = probed;
-          db.prepare('UPDATE videos SET duration = ? WHERE id = ?').run(duration, r.id);
-        }
-      } catch (e) {}
-    }
-
-    return {
-      ...r,
-      duration,
-      file_size: fileSize,
-      settings,
-      poster_url: posterUrl,
-      thumbnail: posterUrl
-    };
-  });
-
-  res.json({ videos });
 });
 
 app.get('/api/videos/top', authMiddleware, (req, res) => {

@@ -10849,19 +10849,34 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
+    let trashLoadReqId = 0;
+
     async function loadTrashVideos() {
+      const reqId = ++trashLoadReqId;
       const container = document.getElementById('trashVideoGrid');
       if (!container) return;
-      container.innerHTML = '';
 
       try {
         const res = await api('/api/videos?trash=1');
-        trashVideos = res.videos || [];
+        if (reqId !== trashLoadReqId) return;
+
+        const rawList = res.videos || [];
+        const seenIds = new Set();
+        trashVideos = [];
+        rawList.forEach(v => {
+          if (!seenIds.has(v.id)) {
+            seenIds.add(v.id);
+            trashVideos.push(v);
+          }
+        });
+
         const trashBadge = document.getElementById('trashCountBadge');
         if (trashBadge) trashBadge.textContent = trashVideos.length;
 
         const btnEmpty = document.getElementById('btnEmptyTrash');
         if (btnEmpty) btnEmpty.style.display = trashVideos.length > 0 ? 'inline-flex' : 'none';
+
+        container.innerHTML = '';
 
         if (trashVideos.length === 0) {
           container.innerHTML = `
@@ -10917,7 +10932,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           container.appendChild(card);
         });
       } catch (err) {
-        showToast('Erro ao carregar lixeira.', true);
+        if (reqId === trashLoadReqId) showToast('Erro ao carregar lixeira.', true);
       }
     }
 

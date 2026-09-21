@@ -952,6 +952,7 @@
       gap: 2px;
     }
 
+    .segmented-control button,
     .segmented-btn {
       background: transparent;
       border: none;
@@ -967,10 +968,12 @@
       justify-content: center;
     }
 
+    .segmented-control button:hover,
     .segmented-btn:hover {
       color: var(--text-main);
     }
 
+    .segmented-control button.active,
     .segmented-btn.active {
       background: var(--primary);
       color: #ffffff;
@@ -1017,6 +1020,7 @@
       border-color: rgba(255, 255, 255, 0.08);
     }
 
+    html[data-theme="dark"] .segmented-control button.active,
     html[data-theme="dark"] .segmented-btn.active {
       background: var(--primary);
       color: #ffffff;
@@ -4467,27 +4471,6 @@
       height: 16px;
       accent-color: #2563EB;
       cursor: pointer;
-    }
-    .segmented-control {
-      display: inline-flex;
-      background: #18181b;
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      padding: 2px;
-    }
-    .segmented-control button {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 11.5px;
-      font-weight: 500;
-      padding: 3px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .segmented-control button.active {
-      background: #2563EB;
-      color: #fff;
     }
     body.is-editor-mode #viewEditor,
     body.is-player-details-mode #viewPlayerDetails {

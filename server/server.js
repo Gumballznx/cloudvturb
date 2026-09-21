@@ -909,8 +909,13 @@ function autoCheckPendingHls() {
         }
         if (inputPath && fs.existsSync(inputPath)) {
           try {
-            const pProc2 = spawn('ffmpeg', ['-y', '-ss', '0.5', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath]);
+            const pProc2 = spawn('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath]);
             pProc2.on('error', () => {});
+            pProc2.on('close', (c) => {
+              if (c === 0 && fs.existsSync(posterPath)) {
+                try { db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(`/videos/${v.id}/poster.jpg`, v.id); } catch (e) {}
+              }
+            });
           } catch (e) {}
         }
       }
@@ -2822,6 +2827,8 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
       title: v.title,
       userId: v.user_id,
       videoUrl: v.video_url || '',
+      thumbnail: `/videos/${v.id}/poster.jpg`,
+      posterUrl: `/videos/${v.id}/poster.jpg`,
       isBlocked: !!v.blocked_at,
       blockedAt: v.blocked_at,
       blockedReason: v.blocked_reason,
@@ -3189,8 +3196,7 @@ app.get('/api/videos', authMiddleware, (req, res) => {
     const videos = rows.map(r => {
       let settings = {};
       try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
-      const posterPath = path.join(VIDEOS_DIR, r.id, 'poster.jpg');
-      const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${r.id}/poster.jpg` : (settings.thumbnailUrl || (r.video_url ? `${r.video_url}#t=0.5` : null));
+      const posterUrl = settings.thumbnailUrl || `${origin}/videos/${r.id}/poster.jpg`;
       return {
         ...r,
         settings,
@@ -3212,8 +3218,7 @@ app.get('/api/videos/top', authMiddleware, (req, res) => {
   const topVideos = rows.map(v => {
     let settings = {};
     try { if (v.settings_json) settings = JSON.parse(v.settings_json); } catch (e) {}
-    const posterPath = path.join(VIDEOS_DIR, v.id, 'poster.jpg');
-    const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${v.id}/poster.jpg` : (settings.thumbnailUrl || (v.video_url ? `${v.video_url}#t=0.5` : null));
+    const posterUrl = settings.thumbnailUrl || `${origin}/videos/${v.id}/poster.jpg`;
     const ctaClicks = db.prepare("SELECT COUNT(*) as count FROM analytics_events WHERE video_id = ? AND event_type = 'cta_clicked'").get(v.id).count;
     const completes = db.prepare("SELECT COUNT(DISTINCT session_id) as count FROM analytics_events WHERE video_id = ? AND (event_type = 'complete' OR (event_type = 'progress' AND milestone = 100))").get(v.id).count;
     const completionRate = v.plays > 0 ? ((completes / v.plays) * 100).toFixed(1) : '0.0';
@@ -5010,6 +5015,43 @@ app.get('/videos/:id/:file', (req, res) => {
   const vidId = path.basename(req.params.id);
   const fileName = path.basename(req.params.file);
   const filePath = path.join(VIDEOS_DIR, vidId, fileName);
+
+  if (!fs.existsSync(filePath) && (fileName === 'poster.jpg' || fileName === 'thumbnail.jpg')) {
+    try {
+      const v = db.prepare('SELECT file_path, video_url FROM videos WHERE id = ?').get(vidId);
+      if (v) {
+        let inputPath = v.file_path;
+        if (!inputPath || !fs.existsSync(inputPath)) {
+          if (v.video_url) {
+            const candidate = path.join(VIDEOS_DIR, path.basename(v.video_url));
+            if (fs.existsSync(candidate)) inputPath = candidate;
+          }
+        }
+        if (!inputPath || !fs.existsSync(inputPath)) {
+          const videoDir = path.join(VIDEOS_DIR, vidId);
+          if (fs.existsSync(videoDir)) {
+            const files = fs.readdirSync(videoDir);
+            const mp4 = files.find(f => f.endsWith('.mp4'));
+            if (mp4) inputPath = path.join(videoDir, mp4);
+          }
+        }
+        if (inputPath && fs.existsSync(inputPath)) {
+          const videoDir = path.join(VIDEOS_DIR, vidId);
+          if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+          try {
+            execFileSync('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', filePath], { timeout: 12000 });
+          } catch (e) {
+            try {
+              execFileSync('ffmpeg', ['-y', '-i', inputPath, '-vframes', '1', '-q:v', '2', filePath], { timeout: 12000 });
+            } catch (e2) {}
+          }
+          if (fs.existsSync(filePath)) {
+            try { db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(`/videos/${vidId}/${fileName}`, vidId); } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {}
+  }
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).send('Arquivo não encontrado.');

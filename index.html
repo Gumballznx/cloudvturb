@@ -9641,6 +9641,19 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (earlyStyle) earlyStyle.remove();
       document.getElementById('pageTitleLabel').textContent = target.title;
 
+      if (tabName !== 'playerDetails') {
+        const deskFrame = document.getElementById('detailsPreviewFrame');
+        const mobFrame = document.getElementById('detailsPreviewFrameMobile');
+        if (deskFrame && deskFrame.src && !deskFrame.src.includes('about:blank')) deskFrame.src = 'about:blank';
+        if (mobFrame && mobFrame.src && !mobFrame.src.includes('about:blank')) mobFrame.src = 'about:blank';
+      }
+      if (tabName !== 'editor') {
+        const edDeskFrame = document.getElementById('editorPreviewFrame');
+        const edMobFrame = document.getElementById('editorPreviewFrameMobile');
+        if (edDeskFrame && edDeskFrame.src && !edDeskFrame.src.includes('about:blank')) edDeskFrame.src = 'about:blank';
+        if (edMobFrame && edMobFrame.src && !edMobFrame.src.includes('about:blank')) edMobFrame.src = 'about:blank';
+      }
+
       if (tabName === 'analytics') {
         Promise.resolve(populateAnalyticsSelector()).then(() => {
           loadVideoAnalyticsData();
@@ -9771,6 +9784,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       filterStorageVideos();
     }
 
+    function resolveVideoPoster(v) {
+      if (!v) return '';
+      const candidate = v.thumbnail || v.posterUrl || (v.settings && v.settings.thumbnailUrl) || '';
+      if (candidate && !candidate.includes('.mp4')) return candidate;
+      return v.id ? `/videos/${v.id}/poster.jpg` : '';
+    }
+
     function filterStorageVideos() {
       const data = window.__storageData;
       if (!data) return;
@@ -9830,7 +9850,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           : '';
 
         const barWidth = Math.min(100, parseFloat(v.pctOfUsed) || 0);
-        const thumbUrl = v.thumbnail || (v.settings && v.settings.thumbnailUrl) || '';
+        const thumbUrl = resolveVideoPoster(v);
 
         const videoCell = `<td>
           <div class="table-vsl-cell">
@@ -10775,7 +10795,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       list.forEach((v, index) => {
         const tr = document.createElement('tr');
-        const thumbUrl = v.thumbnail || (v.settings && v.settings.thumbnailUrl) || '';
+        const thumbUrl = resolveVideoPoster(v);
         const thumbContent = thumbUrl
           ? `<img src="${escapeHtml(thumbUrl)}" class="table-vsl-thumb-img" alt="" onerror="this.remove()" />`
           : `<div class="table-vsl-thumb-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>`;
@@ -11102,7 +11122,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             ? 'Remoto (0 MB)'
             : formatFileSize(v.file_size);
 
-          const posterSrc = v.thumbnail || (v.settings && v.settings.thumbnailUrl) || '';
+          const posterSrc = resolveVideoPoster(v);
           const thumbMarkup = posterSrc
             ? `<img src="${escapeHtml(posterSrc)}" alt="${escapeHtml(v.title)}" class="video-card-poster" loading="lazy" onerror="this.style.display='none'" />`
             : `<div class="thumb-poster-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="4"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"></polygon></svg></div>`;
@@ -11673,7 +11693,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
       const ringOffset = (131.95 - (131.95 * (currentPct / 100))).toFixed(2);
 
-      const posterSrc = v.thumbnail || (v.settings && v.settings.thumbnailUrl) || '';
+      const posterSrc = resolveVideoPoster(v);
       const thumbMarkup = posterSrc
         ? `<img src="${escapeHtml(posterSrc)}" alt="${escapeHtml(v.title)}" class="video-card-poster" loading="lazy" onerror="this.style.display='none'" />`
         : `<div class="thumb-poster-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="4"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"></polygon></svg></div>`;
@@ -14404,6 +14424,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function exitEditor() {
       currentEditorPanelKey = null;
       document.body.classList.remove('is-editor-mode');
+      const edDeskFrame = document.getElementById('editorPreviewFrame');
+      const edMobFrame = document.getElementById('editorPreviewFrameMobile');
+      if (edDeskFrame) edDeskFrame.src = 'about:blank';
+      if (edMobFrame) edMobFrame.src = 'about:blank';
       const vidId = currentEditingVideoId;
       currentEditingVideoId = null;
       closeEditorPanel(false);
@@ -14428,13 +14452,33 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const mobBtn = document.getElementById('btnDetailsDeviceMobile');
       const deskCanvas = document.getElementById('vturbDetailsDesktopCanvas');
       const mobCanvas = document.getElementById('vturbDetailsMobileCanvas');
+      const deskFrame = document.getElementById('detailsPreviewFrame');
+      const mobFrame = document.getElementById('detailsPreviewFrameMobile');
       if (deskBtn) deskBtn.classList.toggle('active', !isMobile);
       if (mobBtn) mobBtn.classList.toggle('active', isMobile);
       if (deskCanvas) deskCanvas.style.display = isMobile ? 'none' : 'block';
       if (mobCanvas) mobCanvas.style.display = isMobile ? 'flex' : 'none';
-      if (isMobile) {
-        const v = currentDetailsVideoId ? videos.find(x => x.id === currentDetailsVideoId) : null;
-        applyPhoneMockupAspect((v?.settings?.aspectRatio) || '16:9', ['vturbDetailsMobileCanvas']);
+
+      if (currentDetailsVideoId) {
+        const tok = token || localStorage.getItem('cloudvturb_token') || '';
+        const tokenPart = tok ? `&token=${encodeURIComponent(tok)}` : '';
+        const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('cloudvturb_theme') || 'light';
+        const playerSrc = `/player?id=${encodeURIComponent(currentDetailsVideoId)}&preview=1&theme=${encodeURIComponent(currentTheme)}${tokenPart}`;
+        if (isMobile) {
+          if (mobFrame && (!mobFrame.src || mobFrame.src.includes('about:blank') || !mobFrame.src.includes(`id=${currentDetailsVideoId}`))) {
+            mobFrame.src = playerSrc;
+          }
+          if (deskFrame) deskFrame.src = 'about:blank';
+        } else {
+          if (deskFrame && (!deskFrame.src || deskFrame.src.includes('about:blank') || !deskFrame.src.includes(`id=${currentDetailsVideoId}`))) {
+            deskFrame.src = playerSrc;
+          }
+          if (mobFrame) mobFrame.src = 'about:blank';
+        }
+        const v = (videos || []).find(x => x.id === currentDetailsVideoId);
+        if (v && isMobile) {
+          applyPhoneMockupAspect((v?.settings?.aspectRatio) || '16:9', ['vturbDetailsMobileCanvas']);
+        }
       }
     }
 
@@ -14486,29 +14530,31 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const mobFrame = document.getElementById('detailsPreviewFrameMobile');
       const deskSkeleton = document.getElementById('detailsPreviewSkeleton');
       const mobSkeleton = document.getElementById('detailsMobileSkeleton');
+      const isMobileView = document.getElementById('btnDetailsDeviceMobile')?.classList.contains('active');
 
       if (deskSkeleton) deskSkeleton.classList.remove('hidden');
       if (mobSkeleton) mobSkeleton.classList.remove('hidden');
 
-      if (deskFrame) {
-        deskFrame.onload = () => {
-          if (deskSkeleton) deskSkeleton.classList.add('hidden');
-        };
-        if (!deskFrame.src || !deskFrame.src.includes(`id=${v.id}`)) {
-          deskFrame.src = playerSrc;
-        } else {
-          if (deskSkeleton) deskSkeleton.classList.add('hidden');
+      if (isMobileView) {
+        if (mobFrame) {
+          mobFrame.onload = () => { if (mobSkeleton) mobSkeleton.classList.add('hidden'); };
+          if (!mobFrame.src || mobFrame.src.includes('about:blank') || !mobFrame.src.includes(`id=${v.id}`)) {
+            mobFrame.src = playerSrc;
+          } else if (mobSkeleton) {
+            mobSkeleton.classList.add('hidden');
+          }
         }
-      }
-      if (mobFrame) {
-        mobFrame.onload = () => {
-          if (mobSkeleton) mobSkeleton.classList.add('hidden');
-        };
-        if (!mobFrame.src || !mobFrame.src.includes(`id=${v.id}`)) {
-          mobFrame.src = playerSrc;
-        } else {
-          if (mobSkeleton) mobSkeleton.classList.add('hidden');
+        if (deskFrame) deskFrame.src = 'about:blank';
+      } else {
+        if (deskFrame) {
+          deskFrame.onload = () => { if (deskSkeleton) deskSkeleton.classList.add('hidden'); };
+          if (!deskFrame.src || deskFrame.src.includes('about:blank') || !deskFrame.src.includes(`id=${v.id}`)) {
+            deskFrame.src = playerSrc;
+          } else if (deskSkeleton) {
+            deskSkeleton.classList.add('hidden');
+          }
         }
+        if (mobFrame) mobFrame.src = 'about:blank';
       }
 
       const isVertical = v.settings && v.settings.aspectRatio === '9:16';
@@ -14691,7 +14737,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       listContainer.innerHTML = vids.map(v => {
         const isSel = v.id === loadSettingsSelectedVideoId;
-        const thumb = v.thumbnail || (v.settings && v.settings.thumbnailUrl) || '';
+        const thumb = resolveVideoPoster(v);
         const thumbHtml = thumb
           ? `<img src="${escapeHtml(thumb)}" alt="" class="load-cfg-item-thumb" onerror="this.onerror=null;this.style.display='none';">`
           : `<div class="load-cfg-item-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--bg-surface);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg></div>`;
@@ -14869,12 +14915,15 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const mobCanvas = document.getElementById('vturbMobileCanvas');
       const btnDesk = document.getElementById('btnDeviceDesktop');
       const btnMob = document.getElementById('btnDeviceMobile');
+      const deskFrame = document.getElementById('editorPreviewFrame');
+      const mobFrame = document.getElementById('editorPreviewFrameMobile');
 
       if (mode === 'mobile') {
         if (deskCanvas) deskCanvas.style.display = 'none';
         if (mobCanvas) mobCanvas.style.display = 'flex';
         if (btnDesk) btnDesk.classList.remove('active');
         if (btnMob) btnMob.classList.add('active');
+        if (deskFrame) deskFrame.src = 'about:blank';
         const v = currentEditingVideoId ? videos.find(x => x.id === currentEditingVideoId) : null;
         applyPhoneMockupAspect((v?.settings?.aspectRatio) || '16:9', ['vturbMobileCanvas']);
       } else {
@@ -14882,7 +14931,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         if (mobCanvas) mobCanvas.style.display = 'none';
         if (btnDesk) btnDesk.classList.add('active');
         if (btnMob) btnMob.classList.remove('active');
+        if (mobFrame) mobFrame.src = 'about:blank';
       }
+      liveUpdateSettings();
     }
 
     function getEditorSettings() {
@@ -15044,18 +15095,26 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         if (edDeskSkel) edDeskSkel.classList.remove('hidden');
         if (edMobSkel) edMobSkel.classList.remove('hidden');
 
-        iframes.forEach(iframe => {
-          iframe.onload = () => {
+        const isMobileEditor = document.getElementById('btnDeviceMobile')?.classList.contains('active');
+        const activeIframe = isMobileEditor ? document.getElementById('editorPreviewFrameMobile') : document.getElementById('editorPreviewFrame');
+        const inactiveIframe = isMobileEditor ? document.getElementById('editorPreviewFrame') : document.getElementById('editorPreviewFrameMobile');
+
+        if (inactiveIframe && inactiveIframe.src && !inactiveIframe.src.includes('about:blank')) {
+          inactiveIframe.src = 'about:blank';
+        }
+
+        if (activeIframe) {
+          activeIframe.onload = () => {
             if (edDeskSkel) edDeskSkel.classList.add('hidden');
             if (edMobSkel) edMobSkel.classList.add('hidden');
           };
-          if (!iframe.src || !iframe.src.includes(`id=${v.id}`)) {
-            iframe.src = newSrc;
+          if (!activeIframe.src || !activeIframe.src.includes(`id=${v.id}`) || activeIframe.src.includes('about:blank')) {
+            activeIframe.src = newSrc;
           } else {
             if (edDeskSkel) edDeskSkel.classList.add('hidden');
             if (edMobSkel) edMobSkel.classList.add('hidden');
           }
-        });
+        }
         generateEmbedSnippets(v);
       }, 300);
     }
@@ -16106,12 +16165,68 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    function populateProfileInputsFromCache() {
+      let cached = currentUser;
+      if (!cached) {
+        try { cached = JSON.parse(localStorage.getItem('cloudvturb_user') || 'null'); } catch (e) {}
+      }
+      if (cached) {
+        const elFirst = document.getElementById('profFirstName');
+        const elLast = document.getElementById('profLastName');
+        const elEmail = document.getElementById('profEmail');
+        const elPhone = document.getElementById('profPhone');
+        if (elFirst && (cached.first_name || cached.name)) {
+          elFirst.value = cached.first_name || (cached.name ? cached.name.split(' ')[0] : '');
+        }
+        if (elLast && (cached.last_name || cached.name)) {
+          elLast.value = cached.last_name || (cached.name ? cached.name.split(' ').slice(1).join(' ') : '');
+        }
+        if (elEmail && cached.email) elEmail.value = cached.email;
+        if (elPhone && cached.phone) elPhone.value = cached.phone;
+        updateAvatarDisplay(cached.avatar_url, cached.name);
+      }
+    }
+
+    function applyCachedGoogleStatus() {
+      const statusEl = document.getElementById('profGoogleStatus');
+      const btnEl = document.getElementById('btnToggleGoogleDrive');
+      if (!statusEl || !btnEl) return;
+      try {
+        const cached = JSON.parse(localStorage.getItem('cloudvturb_google_status') || 'null');
+        if (cached && cached.connected) {
+          statusEl.textContent = cached.email ? `Google Drive Ativo (${cached.email})` : 'Google Drive Ativo';
+          statusEl.style.color = '#10b981';
+          btnEl.textContent = 'Desconectar';
+          btnEl.style.color = '#ef4444';
+          btnEl.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          btnEl.dataset.connected = 'true';
+        }
+      } catch (e) {}
+    }
+
+    function applyCached2FAStatus() {
+      const badgeEl = document.getElementById('prof2faBadge');
+      const btnEl = document.getElementById('btnToggle2FA');
+      if (!badgeEl || !btnEl) return;
+      try {
+        const cached = JSON.parse(localStorage.getItem('cloudvturb_2fa_status') || 'null');
+        if (cached && cached.enabled) {
+          badgeEl.textContent = 'Ativo';
+          badgeEl.className = 'badge-status green';
+          btnEl.textContent = 'Desativar 2FA';
+          btnEl.style.color = '#ef4444';
+        }
+      } catch (e) {}
+    }
+
     async function loadUserProfile() {
+      populateProfileInputsFromCache();
       try {
         const data = await api('/api/user/profile');
         const user = data.user;
         if (!user) return;
         currentUser = { ...currentUser, ...user };
+        try { localStorage.setItem('cloudvturb_user', JSON.stringify(currentUser)); } catch (e) {}
 
         const elFirst = document.getElementById('profFirstName');
         const elLast = document.getElementById('profLastName');
@@ -16546,8 +16661,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const statusEl = document.getElementById('profGoogleStatus');
       const btnEl = document.getElementById('btnToggleGoogleDrive');
       if (!statusEl || !btnEl) return;
+      applyCachedGoogleStatus();
       try {
         const res = await api('/api/user/google/status');
+        try { localStorage.setItem('cloudvturb_google_status', JSON.stringify(res)); } catch (e) {}
         if (res.connected) {
           statusEl.textContent = res.email ? `Google Drive Ativo (${res.email})` : 'Google Drive Ativo';
           statusEl.style.color = '#10b981';
@@ -16580,6 +16697,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             setButtonLoading(confirmBtn, true, 'Desconectando...');
             try {
               await api('/api/user/google/disconnect', { method: 'POST' });
+              try { localStorage.removeItem('cloudvturb_google_status'); } catch (e) {}
               closeConfirmModal();
               showToast('Google Drive desconectado com sucesso.');
               await loadProfileGoogleStatus();
@@ -16605,10 +16723,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             if (tokenResponse && tokenResponse.access_token) {
               googleAccessToken = tokenResponse.access_token;
               try {
-                await api('/api/user/google/connect', {
+                const connRes = await api('/api/user/google/connect', {
                   method: 'POST',
                   body: JSON.stringify({ accessToken: googleAccessToken })
                 });
+                try { localStorage.setItem('cloudvturb_google_status', JSON.stringify({ connected: true, email: connRes.email })); } catch (e) {}
                 showToast('Google Drive conectado com sucesso!');
                 await loadProfileGoogleStatus();
               } catch (err) {
@@ -16627,8 +16746,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const badgeEl = document.getElementById('prof2faBadge');
       const btnEl = document.getElementById('btnToggle2FA');
       if (!badgeEl || !btnEl) return;
+      applyCached2FAStatus();
       try {
         const res = await api('/api/user/2fa/status');
+        try { localStorage.setItem('cloudvturb_2fa_status', JSON.stringify(res)); } catch (e) {}
         if (res.enabled) {
           badgeEl.textContent = 'Ativo';
           badgeEl.className = 'badge-status green';

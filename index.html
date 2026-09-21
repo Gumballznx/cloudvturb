@@ -6073,13 +6073,17 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
         </div>
 
         <div id="libPaneTrash" style="display: none;">
-          <div class="card-panel" style="padding: 16px 20px; margin-bottom: 20px; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.2);">
-            <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="card-panel" style="padding: 16px 20px; margin-bottom: 20px; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 260px;">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #f87171; flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
               <div style="font-size: 13px; color: var(--text-muted); line-height: 1.4;">
                 <strong style="color: var(--text-main);">Vídeos na Lixeira:</strong> Os arquivos locais permanecem ocupando sua cota de armazenamento até serem <strong style="color: #f87171;">excluídos definitivamente</strong>.
               </div>
             </div>
+            <button type="button" class="btn-solid-danger" id="btnEmptyTrash" style="display: none; padding: 8px 16px; font-size: 12.5px; font-weight: 600; border-radius: var(--radius-sm); align-items: center; gap: 8px; flex-shrink: 0;" onclick="emptyTrashPrompt()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              <span>Esvaziar Lixeira</span>
+            </button>
           </div>
 
           <div class="video-grid" id="trashVideoGrid"></div>
@@ -9944,6 +9948,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         trashVideos = tData.videos || [];
         const trashBadge = document.getElementById('trashCountBadge');
         if (trashBadge) trashBadge.textContent = trashVideos.length;
+        const btnEmpty = document.getElementById('btnEmptyTrash');
+        if (btnEmpty) btnEmpty.style.display = trashVideos.length > 0 ? 'inline-flex' : 'none';
 
         videos = vData.videos || [];
         renderVideosGrid();
@@ -10491,6 +10497,31 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       });
     }
 
+    function emptyTrashPrompt() {
+      const count = trashVideos.length;
+      if (count === 0) return;
+      showConfirmDialog({
+        title: 'Esvaziar Lixeira',
+        message: `Atenção: esta ação é irreversível. Deseja realmente excluir todos os ${count} vídeo(s) da lixeira definitivamente? Os arquivos físicos serão deletados do servidor e todo o espaço em disco será liberado.`,
+        confirmText: 'Sim, Esvaziar Lixeira',
+        isDanger: true,
+        onConfirm: async (btn) => {
+          setButtonLoading(btn, true, 'Esvaziando...');
+          try {
+            const res = await api('/api/videos/trash/empty', { method: 'DELETE' });
+            closeConfirmModal();
+            await loadAllDashboardData();
+            loadTrashVideos();
+            showToast(`${res.deletedCount || count} vídeo(s) excluído(s) permanentemente!`);
+          } catch (err) {
+            showToast(err.message, true);
+          } finally {
+            setButtonLoading(btn, false);
+          }
+        }
+      });
+    }
+
     function renderTopVideosTable(list) {
       const tbody = document.getElementById('topVideosTableBody');
       if (!tbody) return;
@@ -10771,6 +10802,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         trashVideos = res.videos || [];
         const trashBadge = document.getElementById('trashCountBadge');
         if (trashBadge) trashBadge.textContent = trashVideos.length;
+
+        const btnEmpty = document.getElementById('btnEmptyTrash');
+        if (btnEmpty) btnEmpty.style.display = trashVideos.length > 0 ? 'inline-flex' : 'none';
 
         if (trashVideos.length === 0) {
           container.innerHTML = `

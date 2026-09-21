@@ -10828,6 +10828,26 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    function formatFileSize(bytes) {
+      if (!bytes || bytes <= 0) return '0 MB';
+      const gb = bytes / (1024 * 1024 * 1024);
+      if (gb >= 1) return `${gb.toFixed(2).replace('.', ',')} GB`;
+      const mb = bytes / (1024 * 1024);
+      if (mb >= 1) return `${mb.toFixed(1).replace('.', ',')} MB`;
+      const kb = bytes / 1024;
+      return `${Math.round(kb)} KB`;
+    }
+
+    function formatDurationDisplay(dur) {
+      if (!dur) return '';
+      if (typeof dur === 'string' && dur.includes(':')) return dur;
+      const sec = Math.round(Number(dur) || 0);
+      if (sec <= 0) return '';
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
     async function loadTrashVideos() {
       const container = document.getElementById('trashVideoGrid');
       if (!container) return;
@@ -10853,21 +10873,36 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         }
 
         trashVideos.forEach(v => {
+          const durText = formatDurationDisplay(v.duration);
+          const sizeText = v.source_type === 'remote' && (!v.file_size || v.file_size === 0)
+            ? 'Remoto (0 MB)'
+            : formatFileSize(v.file_size);
+
           const card = document.createElement('div');
           card.className = 'video-card';
           card.innerHTML = `
             <div class="video-thumb-stage">
-              <video src="${v.video_url ? v.video_url + '#t=0.5' : ''}" preload="metadata" muted playsinline onerror="this.style.display='none'"></video>
-              <div class="thumb-badge-duration" style="background: rgba(239, 68, 68, 0.85);">Na Lixeira</div>
+              <video src="${v.video_url ? v.video_url + '#t=0.5' : ''}" preload="metadata" muted playsinline onerror="this.style.display='none'" onloadedmetadata="if (!this.dataset.durSet && this.duration) { this.dataset.durSet = '1'; const m = Math.floor(this.duration / 60); const s = Math.floor(this.duration % 60); const fmt = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s; const tEl = document.getElementById('trashThumbDur_${v.id}'); if (tEl && !tEl.textContent.trim()) { tEl.textContent = fmt; tEl.style.display = ''; } const sEl = document.getElementById('trashStatsDur_${v.id}'); if (sEl && (sEl.textContent === '--:--' || !sEl.textContent.trim())) { sEl.textContent = fmt; } }"></video>
+              <div class="thumb-badge-source" style="background: rgba(239, 68, 68, 0.9); color: #fff; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 700;">Na Lixeira</div>
+              <div class="thumb-badge-duration" id="trashThumbDur_${v.id}" style="${durText ? '' : 'display:none;'}">${escapeHtml(durText)}</div>
             </div>
             <div class="video-card-body">
               <div class="video-card-title" title="${escapeHtml(v.title)}">${escapeHtml(v.title)}</div>
-              <div class="video-stats-row">
-                <div class="video-stats-item">
+              <div class="video-stats-row" style="flex-wrap: wrap; gap: 8px 12px; margin-bottom: 14px;">
+                <div class="video-stats-item" title="Duração do vídeo">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span id="trashStatsDur_${v.id}">${durText || '--:--'}</span>
+                </div>
+                <div class="video-stats-item" title="Tamanho do arquivo em disco">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span style="font-weight: 600; color: var(--text-main);">${sizeText}</span>
+                </div>
+                <div class="video-stats-item" title="Visualizações">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z"/></svg>
                   <span>${(v.plays || 0).toLocaleString()} plays</span>
                 </div>
                 <div class="video-stats-item">
-                  <span style="color:var(--danger);">${v.source_type === 'local' ? 'Ocupando cota' : 'Remoto'}</span>
+                  <span style="color:var(--danger); font-size: 11px;">${v.source_type === 'local' ? 'Ocupando cota' : 'Remoto'}</span>
                 </div>
               </div>
               <div class="video-card-actions">

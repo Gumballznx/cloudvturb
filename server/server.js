@@ -3138,8 +3138,49 @@ app.get('/api/videos', authMiddleware, (req, res) => {
     try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
     const posterPath = path.join(VIDEOS_DIR, r.id, 'poster.jpg');
     const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${r.id}/poster.jpg` : (settings.thumbnailUrl || (r.video_url ? `${r.video_url}#t=0.5` : null));
+
+    let fileSize = Number(r.file_size || 0);
+    let resolvedPath = r.file_path;
+    if ((!resolvedPath || !fs.existsSync(resolvedPath)) && r.video_url) {
+      const candidate = path.join(VIDEOS_DIR, path.basename(r.video_url));
+      if (fs.existsSync(candidate)) resolvedPath = candidate;
+    }
+
+    if (fileSize === 0) {
+      if (resolvedPath && fs.existsSync(resolvedPath)) {
+        try { fileSize = fs.statSync(resolvedPath).size; } catch (e) {}
+      }
+      const hlsDir = path.join(VIDEOS_DIR, r.id);
+      if (fs.existsSync(hlsDir)) {
+        try {
+          const files = fs.readdirSync(hlsDir);
+          let hlsTotal = 0;
+          for (const f of files) {
+            try { hlsTotal += fs.statSync(path.join(hlsDir, f)).size; } catch (e) {}
+          }
+          if (hlsTotal > fileSize) fileSize = hlsTotal;
+        } catch (e) {}
+      }
+      if (fileSize > 0) {
+        try { db.prepare('UPDATE videos SET file_size = ? WHERE id = ?').run(fileSize, r.id); } catch (e) {}
+      }
+    }
+
+    let duration = r.duration;
+    if ((!duration || duration === '10:00' || duration === '05:00') && resolvedPath && fs.existsSync(resolvedPath)) {
+      try {
+        const probed = getVideoDurationFormatted(resolvedPath);
+        if (probed) {
+          duration = probed;
+          db.prepare('UPDATE videos SET duration = ? WHERE id = ?').run(duration, r.id);
+        }
+      } catch (e) {}
+    }
+
     return {
       ...r,
+      duration,
+      file_size: fileSize,
       settings,
       poster_url: posterUrl,
       thumbnail: posterUrl

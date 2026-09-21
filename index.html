@@ -5927,7 +5927,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
                 </div>
               </div>
 
-              <button class="btn-clean-secondary" onclick="navigateTo('videos')">Ver Todas →</button>
+              <button class="btn-clean-secondary" onclick="navigateTo('videos')">Ver Todas na Biblioteca →</button>
             </div>
           </div>
 
@@ -5936,7 +5936,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
           </div>
 
           <div id="overviewFoldersVideosDivider" class="content-section-divider" style="display: none;">
-            <span class="content-section-label">Vídeos Recentes</span>
+            <span class="content-section-label">Vídeos Recentes (5 mais recentes)</span>
             <div class="content-section-line"></div>
           </div>
 
@@ -10281,6 +10281,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       renderFoldersGrid();
       renderVideosGrid();
+      renderOverviewRecent();
     }
 
     function setViewMode(mode) {
@@ -11409,8 +11410,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function renderOverviewRecent() {
       const container = document.getElementById('overviewRecentVideos');
+      if (!container) return;
       container.innerHTML = '';
-      const recent = videos.slice(0, 3);
+      const sortedVideos = [...(videos || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const recent = sortedVideos.slice(0, 5);
       if (recent.length === 0) {
         if (!folders || folders.length === 0) {
           container.innerHTML = `<p style="grid-column: 1/-1; font-size: 13px; color: var(--text-dim); padding: 12px 0;">Nenhum vídeo recente disponível.</p>`;
@@ -11419,6 +11422,16 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         return;
       }
       recent.forEach(v => container.appendChild(createVideoCardElement(v)));
+      if (sortedVideos.length > 5) {
+        const moreContainer = document.createElement('div');
+        moreContainer.style.cssText = 'grid-column: 1/-1; display: flex; justify-content: center; padding: 16px 0 8px;';
+        moreContainer.innerHTML = `
+          <button type="button" class="btn-clean-secondary" onclick="navigateTo('videos')" style="font-weight: 600; padding: 9px 18px;">
+            Ver todos os ${sortedVideos.length} vídeos na Biblioteca →
+          </button>
+        `;
+        container.appendChild(moreContainer);
+      }
       updateContentLayout();
     }
 

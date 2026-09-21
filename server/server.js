@@ -3132,6 +3132,14 @@ app.get('/api/videos', authMiddleware, (req, res) => {
 
     query += 'ORDER BY created_at DESC';
 
+    if (req.query.limit) {
+      const limitNum = parseInt(req.query.limit, 10);
+      if (!isNaN(limitNum) && limitNum > 0) {
+        query += ' LIMIT ?';
+        params.push(limitNum);
+      }
+    }
+
     const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
     const rows = db.prepare(query).all(...params);
     const videos = rows.map(r => {

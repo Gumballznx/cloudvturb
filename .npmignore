@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.agents
+*.log
+data/
+videos/
+node_modules/
+server/data/
+server/videos/
+server/node_modules/

@@ -67,8 +67,8 @@ const PLAYER_DOMAIN = (process.env.PLAYER_DOMAIN || (BASE_DOMAIN ? `player.${BAS
 const DASH_DOMAIN = (process.env.DASH_DOMAIN || (BASE_DOMAIN ? `dash.${BASE_DOMAIN}` : '')).toLowerCase();
 const HELP_DOMAIN = (process.env.HELP_DOMAIN || (BASE_DOMAIN ? `help.${BASE_DOMAIN}` : '')).toLowerCase();
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const VIDEOS_DIR = process.env.VIDEOS_DIR || path.join(__dirname, 'videos');
+const DATA_DIR = process.env.DATA_DIR || (fs.existsSync(path.join(__dirname, 'data')) ? path.join(__dirname, 'data') : path.join(process.cwd(), 'data'));
+const VIDEOS_DIR = process.env.VIDEOS_DIR || (fs.existsSync(path.join(__dirname, 'videos')) ? path.join(__dirname, 'videos') : path.join(process.cwd(), 'videos'));
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

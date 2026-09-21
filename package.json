@@ -1,0 +1,64 @@
+{
+  "name": "cloudvturb",
+  "version": "1.0.1",
+  "description": "High-Conversion VSL Hosting, Smart Autoplay & Video Streaming SaaS Platform",
+  "main": "server/server.js",
+  "bin": {
+    "cloudvturb": "bin/cli.js"
+  },
+  "keywords": [
+    "vsl",
+    "vturb",
+    "video-player",
+    "smart-autoplay",
+    "streaming",
+    "hls",
+    "video-sales-letter",
+    "video-hosting"
+  ],
+  "author": "Gumballxnz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gumballxnz/meu-vturb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gumballxnz/meu-vturb/issues"
+  },
+  "homepage": "https://github.com/Gumballxnz/meu-vturb#readme",
+  "files": [
+    "bin",
+    "server/server.js",
+    "server/vturb-analytics-api.js",
+    "server/public",
+    "index.html",
+    "player.html",
+    "player.js",
+    "convite.html",
+    "help.html",
+    "landing.html",
+    "analytics-api.html",
+    "favicon.svg",
+    "README.md",
+    ".env.example"
+  ],
+  "scripts": {
+    "start": "node bin/cli.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "geoip-lite": "^2.0.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

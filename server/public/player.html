@@ -584,7 +584,7 @@
       </svg>
     </div>
 
-    <div class="smart-autoplay-overlay pos-center" id="smartOverlay">
+    <div class="smart-autoplay-overlay pos-center hidden" id="smartOverlay">
       <div class="pulse-badge-wrapper style-square size-medium anim-none" id="pulseBadgeWrapper">
         <div class="pulse-badge-halo" id="pulseHalo" style="display: none;"></div>
         <div class="pulse-badge" id="pulseBadge">
@@ -847,6 +847,15 @@
       const resumeReplayText = params.get('res_replay') || dbSettings.resumeReplayText || 'Reiniciar o vídeo';
       const resumeBgColor = params.get('res_bg') || dbSettings.resumeBgColor || 'rgba(0, 0, 0, 0.7)';
       const resumeTextColor = params.get('res_color') || dbSettings.resumeTextColor || '#ffffff';
+      const storageKey = 'cloudvturb_pos_' + vidId;
+      let savedResumeTime = 0;
+      if (resumeEnabled) {
+        try {
+          const sTime = parseFloat(localStorage.getItem(storageKey));
+          if (sTime && sTime > 5) savedResumeTime = sTime;
+        } catch (e) {}
+      }
+      const hasSavedResume = savedResumeTime > 5;
       const rawCtaUrl = params.get('cta_url') || dbSettings.ctaUrl || '';
       const validCtaUrl = (rawCtaUrl && rawCtaUrl.trim() !== '' && rawCtaUrl !== 'https://seusite.com/checkout') ? rawCtaUrl.trim() : '';
       const ctaEnabled = (params.has('cta') ? params.get('cta') === '1' : (dbSettings.ctaEnabled === true)) && Boolean(validCtaUrl);
@@ -923,7 +932,7 @@
       function applyAudioNoticeSettings(cfg) {
         if (!smartOverlay || !pulseBadge || !pulseIcon || (!overlayTextTop && !overlayText)) return;
 
-        if (cfg.enabled === false) {
+        if (cfg.enabled === false || hasSavedResume) {
           smartOverlay.classList.add('hidden');
           return;
         } else if (!hasUserUnmuted) {

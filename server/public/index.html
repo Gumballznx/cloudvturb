@@ -3045,7 +3045,7 @@
     .import-drop-zone {
       border: 1.5px dashed var(--color-primary);
       border-radius: 16px;
-      padding: 36px 20px;
+      padding: 24px 18px;
       background: var(--color-surface-muted);
       display: flex;
       flex-direction: column;
@@ -3065,18 +3065,18 @@
 
     .import-cloud-icon {
       color: var(--color-primary);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     .import-drop-text {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       color: var(--color-primary);
       line-height: 1.4;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
     }
 
     .import-browse-link {
@@ -3995,7 +3995,8 @@
       transition: transform 0.25s ease, opacity 0.25s ease;
       z-index: 99999999;
       pointer-events: none;
-      max-width: calc(100vw - 32px);
+      max-width: min(560px, calc(100vw - 32px));
+      word-break: break-word;
     }
 
     html[data-theme="dark"] .toast-msg {
@@ -7010,10 +7011,18 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
         <button class="btn-icon" onclick="closeNewVideoModal()">&times;</button>
       </div>
       <div class="modal-body-clean">
+        <div id="importSuccessBanner" style="display: none; padding: 10px 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; font-size: 13px; color: #10b981; margin-bottom: 14px; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span id="importSuccessMsg" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Vídeo(s) importado(s) com sucesso e em otimização!</span>
+          </div>
+          <button type="button" class="btn-icon" style="color: #10b981; font-size: 16px; line-height: 1; padding: 0 4px;" onclick="document.getElementById('importSuccessBanner').style.display = 'none';">&times;</button>
+        </div>
+
         <div class="import-drop-zone" id="importDropZone">
-          <input type="file" id="newVidFile" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/avi,video/x-msvideo,video/x-m4v,.mp4,.webm,.mov,.mkv,.avi,.m4v" style="display: none;">
+          <input type="file" id="newVidFile" multiple accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/avi,video/x-msvideo,video/x-m4v,.mp4,.webm,.mov,.mkv,.avi,.m4v" style="display: none;">
           <div class="import-cloud-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
               <polyline points="12 11 12 16"></polyline>
               <polyline points="9 13 12 10 15 13"></polyline>
@@ -7055,7 +7064,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
           </div>
         </div>
 
-        <div id="importDetailsSection" style="margin-top: 18px;">
+        <div id="importDetailsSection" style="margin-top: 16px;">
           <div class="form-row" style="margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <label class="form-label" style="margin-bottom: 0;">Título da VSL</label>
@@ -7078,8 +7087,12 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
             </select>
           </div>
 
-          <div id="selectedFileInfo" style="display: none; padding: 10px 14px; background: var(--color-primary-soft); border: 1px solid var(--color-primary-border); border-radius: 8px; font-size: 12.5px; color: var(--color-primary); margin-bottom: 12px;">
-            <strong id="selectedFileName">arquivo.mp4</strong> (<span id="selectedFileSize">0 MB</span>)
+          <div id="selectedFileInfo" style="display: none; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span id="selectedFilesCount" style="font-size: 12px; font-weight: 700; color: var(--color-primary);">1 vídeo selecionado</span>
+              <button type="button" onclick="clearSelectedVideoFiles()" style="background: none; border: none; font-size: 11.5px; color: var(--text-dim); cursor: pointer; text-decoration: underline; padding: 0;">Remover todos</button>
+            </div>
+            <div id="selectedFilesList" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;"></div>
           </div>
 
           <div id="uploadStatusProgress" style="display: none; margin-top: 12px;">
@@ -7093,7 +7106,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
       </div>
       <div class="modal-footer-clean">
         <button class="btn-clean-secondary" onclick="closeNewVideoModal()">Cancelar</button>
-        <button class="btn-primary-action" id="btnSubmitNewVideo" onclick="submitNewVideo()">Salvar e Abrir Editor</button>
+        <button class="btn-primary-action" id="btnSubmitNewVideo" onclick="submitNewVideo()">Salvar e Importar</button>
       </div>
     </div>
   </div>
@@ -8328,6 +8341,29 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
       return data;
+    }
+
+    function truncateFilename(filename, maxLen = 32) {
+      if (!filename || typeof filename !== 'string') return '';
+      if (filename.length <= maxLen) return filename;
+      const dotIndex = filename.lastIndexOf('.');
+      if (dotIndex > 0 && filename.length - dotIndex <= 8) {
+        const ext = filename.slice(dotIndex);
+        const nameWithoutExt = filename.slice(0, dotIndex);
+        const keepChars = Math.max(3, maxLen - ext.length - 3);
+        return nameWithoutExt.slice(0, keepChars) + '...' + ext;
+      }
+      return filename.slice(0, maxLen - 3) + '...';
+    }
+
+    function formatTitleFromFilename(filename, maxLen = 45) {
+      if (!filename) return 'Minha VSL';
+      let clean = filename.replace(/\.[^/.]+$/, '').trim();
+      clean = clean.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (clean.length > maxLen) {
+        clean = clean.slice(0, maxLen).trim();
+      }
+      return clean || 'Minha VSL';
     }
 
     function showToast(text, isError = false) {
@@ -10980,17 +11016,18 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
       const titleInput = document.getElementById('onbVidTitle');
       if (titleInput && !titleInput.value.trim()) {
-        titleInput.value = file.name.replace(/\.[^/.]+$/, '');
+        titleInput.value = formatTitleFromFilename(file.name, 45);
       }
       const infoBox = document.getElementById('onbSelectedFileInfo');
       const nameLabel = document.getElementById('onbSelectedFileName');
       const sizeLabel = document.getElementById('onbSelectedFileSize');
       if (infoBox && nameLabel && sizeLabel) {
-        nameLabel.textContent = file.name;
+        nameLabel.textContent = truncateFilename(file.name, 34);
+        nameLabel.title = file.name;
         sizeLabel.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
         infoBox.style.display = 'block';
       }
-      showToast(`Arquivo "${file.name}" selecionado!`);
+      showToast(`Arquivo "${truncateFilename(file.name, 26)}" selecionado!`);
     }
 
     function openOnboardingDrivePicker() {
@@ -14837,17 +14874,20 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    let selectedVideoFiles = [];
+
     function openNewVideoModal() {
+      clearSelectedVideoFiles();
       document.getElementById('newVidTitle').value = '';
-      document.getElementById('newVidFile').value = '';
       document.getElementById('newVidUrl').value = '';
-      const infoBox = document.getElementById('selectedFileInfo');
-      if (infoBox) infoBox.style.display = 'none';
+      const banner = document.getElementById('importSuccessBanner');
+      if (banner) banner.style.display = 'none';
       const remoteSec = document.getElementById('newVidRemoteSection');
       if (remoteSec) remoteSec.style.display = 'none';
       const link = document.getElementById('toggleRemoteUrlBtn');
       if (link) link.textContent = '+ Adicionar por Link (Cloudflare R2 / URL)';
-      document.getElementById('uploadStatusProgress').style.display = 'none';
+      const statusDiv = document.getElementById('uploadStatusProgress');
+      if (statusDiv) statusDiv.style.display = 'none';
       populateFolderSelects();
       const folderSelect = document.getElementById('newVidFolderSelect');
       if (folderSelect && currentFolderId !== 'root') {
@@ -14858,6 +14898,103 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function closeNewVideoModal() {
       document.getElementById('newVideoModal').classList.remove('active');
+    }
+
+    function renderSelectedFilesList() {
+      const container = document.getElementById('selectedFileInfo');
+      const countEl = document.getElementById('selectedFilesCount');
+      const listEl = document.getElementById('selectedFilesList');
+      const submitBtn = document.getElementById('btnSubmitNewVideo');
+      if (!container || !listEl) return;
+
+      if (!selectedVideoFiles || selectedVideoFiles.length === 0) {
+        container.style.display = 'none';
+        listEl.innerHTML = '';
+        if (submitBtn) submitBtn.textContent = 'Salvar e Importar';
+        return;
+      }
+
+      const totalSize = selectedVideoFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+      const totalMb = (totalSize / (1024 * 1024)).toFixed(1);
+      const count = selectedVideoFiles.length;
+
+      if (countEl) {
+        countEl.textContent = `${count} ${count === 1 ? 'vídeo selecionado' : 'vídeos selecionados'} (${totalMb} MB)`;
+      }
+
+      listEl.innerHTML = selectedVideoFiles.map((file, idx) => {
+        const sizeStr = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+        const displayName = truncateFilename(file.name, 36);
+        return `
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: var(--color-primary-soft); border: 1px solid var(--color-primary-border); border-radius: 8px; font-size: 12.5px; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; color: var(--color-primary);"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--color-primary);" title="${escapeHtml(file.name)}">${escapeHtml(displayName)}</span>
+              <span style="flex-shrink: 0; font-size: 11.5px; color: var(--text-dim);">(${sizeStr})</span>
+            </div>
+            <button type="button" onclick="removeSelectedVideoFile(${idx})" style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 2px 4px; font-size: 16px; line-height: 1;" title="Remover">&times;</button>
+          </div>
+        `;
+      }).join('');
+
+      container.style.display = 'block';
+      if (submitBtn) {
+        submitBtn.textContent = `Salvar e Importar (${count} ${count === 1 ? 'vídeo' : 'vídeos'})`;
+      }
+    }
+
+    function removeSelectedVideoFile(index) {
+      if (index >= 0 && index < selectedVideoFiles.length) {
+        selectedVideoFiles.splice(index, 1);
+        renderSelectedFilesList();
+        if (selectedVideoFiles.length === 0) {
+          const fileInput = document.getElementById('newVidFile');
+          if (fileInput) fileInput.value = '';
+        }
+      }
+    }
+
+    function clearSelectedVideoFiles() {
+      selectedVideoFiles = [];
+      const fileInput = document.getElementById('newVidFile');
+      if (fileInput) fileInput.value = '';
+      renderSelectedFilesList();
+    }
+
+    function handleFilesAdded(files) {
+      if (!files || files.length === 0) return;
+      const validVideos = [];
+      let hasInvalid = false;
+
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (isVideoFile(f)) {
+          const exists = selectedVideoFiles.some(existing => existing.name === f.name && existing.size === f.size);
+          if (!exists) {
+            validVideos.push(f);
+          }
+        } else {
+          hasInvalid = true;
+        }
+      }
+
+      if (hasInvalid) {
+        showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não foram adicionados.', true);
+      }
+
+      if (validVideos.length > 0) {
+        selectedVideoFiles = selectedVideoFiles.concat(validVideos);
+        const titleInput = document.getElementById('newVidTitle');
+        if (titleInput && !titleInput.value.trim() && selectedVideoFiles.length === 1) {
+          titleInput.value = formatTitleFromFilename(selectedVideoFiles[0].name, 45);
+        }
+        renderSelectedFilesList();
+        const banner = document.getElementById('importSuccessBanner');
+        if (banner) banner.style.display = 'none';
+        const count = validVideos.length;
+        const firstName = truncateFilename(validVideos[0].name, 26);
+        showToast(count === 1 ? `Arquivo "${firstName}" pronto para importação!` : `${count} vídeos adicionados à fila de importação!`);
+      }
     }
 
     function setupImportDropZoneEvents() {
@@ -14890,19 +15027,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         e.preventDefault();
         dropZone.classList.remove('dragover');
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          const droppedFile = e.dataTransfer.files[0];
-          if (!isVideoFile(droppedFile)) {
-            showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
-            return;
-          }
-          fileInput.files = e.dataTransfer.files;
-          handleLocalFileSelected(droppedFile);
+          handleFilesAdded(Array.from(e.dataTransfer.files));
         }
       });
 
       fileInput.addEventListener('change', () => {
         if (fileInput.files && fileInput.files.length > 0) {
-          handleLocalFileSelected(fileInput.files[0]);
+          handleFilesAdded(Array.from(fileInput.files));
+          fileInput.value = '';
         }
       });
 
@@ -14911,47 +15043,20 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         if (!modal || !modal.classList.contains('active')) return;
         const clipboardItems = (e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData))?.items;
         if (!clipboardItems) return;
+        const pastedFiles = [];
         for (let item of clipboardItems) {
           if (item.kind === 'file') {
             if (item.type.startsWith('video/')) {
-              const blob = item.getAsFile();
-              const dataTransfer = new DataTransfer();
-              dataTransfer.items.add(blob);
-              fileInput.files = dataTransfer.files;
-              handleLocalFileSelected(blob);
-              break;
+              pastedFiles.push(item.getAsFile());
             } else if (item.type.startsWith('image/')) {
-              showToast('Imagens não são permitidas. Por favor, cole um arquivo de vídeo.', true);
-              break;
+              showToast('Imagens não são permitidas. Cole apenas arquivos de vídeo.', true);
             }
           }
         }
+        if (pastedFiles.length > 0) {
+          handleFilesAdded(pastedFiles);
+        }
       });
-    }
-
-    function handleLocalFileSelected(file) {
-      if (!file) return;
-      if (!isVideoFile(file)) {
-        showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
-        const fileInput = document.getElementById('newVidFile');
-        if (fileInput) fileInput.value = '';
-        const infoBox = document.getElementById('selectedFileInfo');
-        if (infoBox) infoBox.style.display = 'none';
-        return;
-      }
-      const titleInput = document.getElementById('newVidTitle');
-      if (titleInput && !titleInput.value.trim()) {
-        titleInput.value = file.name.replace(/\.[^/.]+$/, '');
-      }
-      const infoBox = document.getElementById('selectedFileInfo');
-      const nameLabel = document.getElementById('selectedFileName');
-      const sizeLabel = document.getElementById('selectedFileSize');
-      if (infoBox && nameLabel && sizeLabel) {
-        nameLabel.textContent = file.name;
-        sizeLabel.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-        infoBox.style.display = 'block';
-      }
-      showToast(`Arquivo "${file.name}" selecionado! Clique em Salvar e Importar.`);
     }
 
     function openGoogleDrivePicker() {
@@ -15056,22 +15161,28 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (progressBar) progressBar.style.width = '60%';
 
       try {
+        const cleanTitle = title ? title.slice(0, 60) : 'Vídeo Google Drive';
         const res = await api('/api/upload/google-drive', {
           method: 'POST',
           body: JSON.stringify({
             fileId,
             accessToken,
-            title,
+            title: cleanTitle,
             folderId
           })
         });
 
         if (progressBar) progressBar.style.width = '100%';
         if (percentLabel) percentLabel.textContent = '100%';
-        closeNewVideoModal();
         await loadAllDashboardData();
-        navigateTo('videos');
+        renderVideosGrid();
         startOptimizingPoller();
+        const banner = document.getElementById('importSuccessBanner');
+        const bannerMsg = document.getElementById('importSuccessMsg');
+        if (banner && bannerMsg) {
+          bannerMsg.textContent = 'Vídeo do Google Drive importado com sucesso e em otimização!';
+          banner.style.display = 'flex';
+        }
         showToast('Vídeo do Google Drive importado! A otimização foi iniciada em segundo plano.');
       } catch (err) {
         showToast(err.message || 'Erro na importação do Google Drive.', true);
@@ -15084,138 +15195,190 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     }
 
     async function submitNewVideo() {
-      const title = (document.getElementById('newVidTitle').value.trim() || 'Minha Nova VSL').slice(0, 70);
       const btn = document.getElementById('btnSubmitNewVideo');
       const folderSelect = document.getElementById('newVidFolderSelect');
       const targetFolderId = folderSelect && folderSelect.value !== 'root' ? folderSelect.value : null;
-
-      const fileInput = document.getElementById('newVidFile');
       const remoteUrl = document.getElementById('newVidUrl').value.trim();
+      const rawUserTitle = (document.getElementById('newVidTitle').value || '').trim();
 
-      let videoUrl = '';
-      let sourceType = 'remote';
-      let filePath = null;
-      let fileSize = 0;
-      let videoDuration = null;
-
-      if (fileInput && fileInput.files && fileInput.files.length > 0) {
-        sourceType = 'local';
-        const file = fileInput.files[0];
-        if (!isVideoFile(file)) {
-          showToast('Apenas arquivos de vídeo são permitidos (.mp4, .mov, .webm, .mkv, .avi, .m4v). Imagens e outros formatos não são aceitos.', true);
-          return;
-        }
-        const formData = new FormData();
-        formData.append('videoFile', file);
-
-        setButtonLoading(btn, true, 'Enviando vídeo...');
+      if (selectedVideoFiles && selectedVideoFiles.length > 0) {
+        const total = selectedVideoFiles.length;
+        setButtonLoading(btn, true, total === 1 ? 'Enviando...' : `Enviando (1/${total})...`);
         const statusText = document.getElementById('uploadStatusText');
         const progressDiv = document.getElementById('uploadStatusProgress');
         const progressBar = document.getElementById('uploadProgressBar');
         const percentLabel = document.getElementById('uploadPercentLabel');
 
-        if (statusText) statusText.textContent = 'Enviando vídeo...';
         if (progressDiv) progressDiv.style.display = 'block';
 
-        try {
-          const uploadRes = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/upload');
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        let successCount = 0;
+        const uploadQueue = [...selectedVideoFiles];
 
-            xhr.upload.onprogress = (e) => {
-              if (e.lengthComputable) {
-                const pct = Math.round((e.loaded / e.total) * 100);
-                if (progressBar) progressBar.style.width = pct + '%';
-                if (percentLabel) percentLabel.textContent = pct + '%';
-                if (statusText) statusText.textContent = `Enviando vídeo... ${pct}%`;
-              }
-            };
+        for (let i = 0; i < uploadQueue.length; i++) {
+          const file = uploadQueue[i];
+          const fileNameTruncated = truncateFilename(file.name, 24);
+          if (statusText) {
+            statusText.textContent = total > 1
+              ? `Enviando vídeo ${i + 1} de ${total}: ${fileNameTruncated}`
+              : `Enviando vídeo: ${fileNameTruncated}`;
+          }
+          if (progressBar) progressBar.style.width = '0%';
+          if (percentLabel) percentLabel.textContent = '0%';
 
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                resolve(JSON.parse(xhr.responseText));
-              } else {
-                try {
-                  const errJson = JSON.parse(xhr.responseText);
-                  reject(new Error(errJson.error || 'Falha no upload'));
-                } catch (e) {
-                  reject(new Error('Erro durante o upload'));
+          try {
+            const formData = new FormData();
+            formData.append('videoFile', file);
+
+            const uploadRes = await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open('POST', '/api/upload');
+              xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+              xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                  const pct = Math.round((e.loaded / e.total) * 100);
+                  if (progressBar) progressBar.style.width = pct + '%';
+                  if (percentLabel) percentLabel.textContent = pct + '%';
+                  if (statusText) {
+                    statusText.textContent = total > 1
+                      ? `Enviando vídeo ${i + 1} de ${total}: ${fileNameTruncated} (${pct}%)`
+                      : `Enviando vídeo: ${fileNameTruncated} (${pct}%)`;
+                  }
                 }
-              }
-            };
+              };
 
-            xhr.onerror = () => reject(new Error('Erro de conexão ao enviar vídeo'));
-            xhr.send(formData);
-          });
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  try {
+                    resolve(JSON.parse(xhr.responseText));
+                  } catch (e) {
+                    reject(new Error('Resposta inválida do servidor.'));
+                  }
+                } else {
+                  try {
+                    const errJson = JSON.parse(xhr.responseText);
+                    reject(new Error(errJson.error || 'Falha no upload'));
+                  } catch (e) {
+                    reject(new Error('Erro durante o upload'));
+                  }
+                }
+              };
 
-          videoUrl = uploadRes.videoUrl;
-          filePath = uploadRes.filePath;
-          fileSize = uploadRes.fileSize || 0;
-          videoDuration = uploadRes.duration || null;
-        } catch (err) {
-          showToast(err.message, true);
-          setButtonLoading(btn, false);
-          if (progressDiv) progressDiv.style.display = 'none';
-          return;
+              xhr.onerror = () => reject(new Error('Erro de conexão ao enviar vídeo'));
+              xhr.send(formData);
+            });
+
+            let finalTitle = '';
+            if (rawUserTitle) {
+              finalTitle = total === 1 ? rawUserTitle.slice(0, 60) : `${rawUserTitle.slice(0, 50)} (${i + 1})`;
+            } else {
+              finalTitle = formatTitleFromFilename(file.name, 45);
+            }
+
+            await api('/api/videos', {
+              method: 'POST',
+              body: JSON.stringify({
+                title: finalTitle,
+                videoUrl: uploadRes.videoUrl,
+                sourceType: 'local',
+                filePath: uploadRes.filePath,
+                fileSize: uploadRes.fileSize || 0,
+                duration: uploadRes.duration || null,
+                folderId: targetFolderId,
+                settings: {
+                  barColor: '#2563EB',
+                  borderRadius: '16px',
+                  aspectRatio: '16:9',
+                  smartAutoplay: true,
+                  autoplayText: 'Seu vídeo ja iniciou\\nClique para escutar',
+                  fakeProgress: true,
+                  blockSeek: true,
+                  ctaEnabled: false,
+                  ctaTime: 10,
+                  ctaText: '',
+                  ctaUrl: '',
+                  ctaColor: '#10b981',
+                  ctaSubtext: '',
+                  resume: true,
+                  pixels: false
+                }
+              })
+            });
+
+            successCount++;
+          } catch (err) {
+            showToast(`Falha em "${fileNameTruncated}": ${err.message}`, true);
+          }
         }
-      } else if (remoteUrl) {
-        videoUrl = remoteUrl;
-        sourceType = 'remote';
-        setButtonLoading(btn, true, 'Cadastrando...');
-      } else {
-        showToast('Selecione um arquivo de vídeo ou informe uma URL.', true);
+
+        setButtonLoading(btn, false);
+        if (progressDiv) progressDiv.style.display = 'none';
+
+        if (successCount > 0) {
+          clearSelectedVideoFiles();
+          document.getElementById('newVidTitle').value = '';
+          await loadAllDashboardData();
+          renderVideosGrid();
+          startOptimizingPoller();
+
+          const banner = document.getElementById('importSuccessBanner');
+          const bannerMsg = document.getElementById('importSuccessMsg');
+          if (banner && bannerMsg) {
+            bannerMsg.textContent = successCount === 1
+              ? 'Vídeo importado com sucesso e em otimização! Você pode adicionar outro vídeo abaixo ou ir para a biblioteca.'
+              : `${successCount} vídeos importados com sucesso e em otimização! Você pode adicionar mais vídeos ou ir para a biblioteca.`;
+            banner.style.display = 'flex';
+          }
+          showToast(successCount === 1
+            ? 'Vídeo importado com sucesso! Otimização iniciada.'
+            : `${successCount} vídeos importados com sucesso! Otimização iniciada.`);
+        }
         return;
       }
 
-      try {
-        const res = await api('/api/videos', {
-          method: 'POST',
-          body: JSON.stringify({
-            title,
-            videoUrl,
-            sourceType,
-            filePath,
-            fileSize,
-            duration: videoDuration,
-            folderId: targetFolderId,
-            settings: {
-              barColor: '#2563EB',
-              borderRadius: '16px',
-              aspectRatio: '16:9',
-              smartAutoplay: true,
-              autoplayText: 'Seu vídeo ja iniciou\\nClique para escutar',
-              fakeProgress: true,
-              blockSeek: true,
-              ctaEnabled: false,
-              ctaTime: 10,
-              ctaText: '',
-              ctaUrl: '',
-              ctaColor: '#10b981',
-              ctaSubtext: '',
-              resume: true,
-              pixels: false
-            }
-          })
-        });
-
-        closeNewVideoModal();
-        await loadAllDashboardData();
-        if (sourceType === 'local') {
-          showToast('Vídeo enviado com sucesso! A otimização foi iniciada em segundo plano.');
-          navigateTo('videos');
-          startOptimizingPoller();
-        } else {
+      if (remoteUrl) {
+        const title = (rawUserTitle || 'Minha VSL').slice(0, 60);
+        setButtonLoading(btn, true, 'Cadastrando...');
+        try {
+          const res = await api('/api/videos', {
+            method: 'POST',
+            body: JSON.stringify({
+              title,
+              videoUrl: remoteUrl,
+              sourceType: 'remote',
+              folderId: targetFolderId,
+              settings: {
+                barColor: '#2563EB',
+                borderRadius: '16px',
+                aspectRatio: '16:9',
+                smartAutoplay: true,
+                autoplayText: 'Seu vídeo ja iniciou\\nClique para escutar',
+                fakeProgress: true,
+                blockSeek: true,
+                ctaEnabled: false,
+                ctaTime: 10,
+                ctaText: '',
+                ctaUrl: '',
+                ctaColor: '#10b981',
+                ctaSubtext: '',
+                resume: true,
+                pixels: false
+              }
+            })
+          });
+          closeNewVideoModal();
+          await loadAllDashboardData();
           showToast('VSL adicionada com sucesso!');
           openEditor(res.id);
+        } catch (err) {
+          showToast(err.message, true);
+        } finally {
+          setButtonLoading(btn, false);
         }
-      } catch (err) {
-        showToast(err.message, true);
-      } finally {
-        setButtonLoading(btn, false);
-        const progressDiv = document.getElementById('uploadStatusProgress');
-        if (progressDiv) progressDiv.style.display = 'none';
+        return;
       }
+
+      showToast('Selecione ao menos um arquivo de vídeo ou informe uma URL.', true);
     }
 
     async function loadUsersTable() {

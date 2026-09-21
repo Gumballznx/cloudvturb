@@ -28,8 +28,8 @@
       background-color: transparent !important;
     }
     html.theme-light, html.theme-light body {
-      background-color: #f8fafc !important;
-      color: #0f172a;
+      background-color: #000 !important;
+      color: #fff;
     }
     .player-wrapper {
       position: relative;
@@ -39,11 +39,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #020617;
+      background: #000;
       overflow: hidden;
     }
     html.theme-light .player-wrapper {
-      background: #f1f5f9;
+      background: #000;
     }
     .player-skeleton {
       position: absolute;
@@ -58,7 +58,7 @@
       pointer-events: none;
     }
     html.theme-light .player-skeleton {
-      background: #e2e8f0;
+      background: #090d16;
     }
     .player-skeleton.hidden {
       opacity: 0;
@@ -72,7 +72,7 @@
       animation: playerShimmerAnim 1.8s infinite ease-in-out;
     }
     html.theme-light .player-skeleton-shimmer {
-      background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.05) 50%, transparent 100%);
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
       background-size: 200% 100%;
     }
     @keyframes playerShimmerAnim {
@@ -92,8 +92,8 @@
       color: rgba(255, 255, 255, 0.5);
     }
     html.theme-light .player-skeleton-pulse {
-      background: rgba(0, 0, 0, 0.06);
-      color: rgba(0, 0, 0, 0.4);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.5);
     }
     .player-poster {
       position: absolute;
@@ -1003,13 +1003,16 @@
           playerPoster.classList.add('hidden');
         }
       }
-      video.addEventListener('playing', hideSkeletonAndPoster);
-      video.addEventListener('canplay', function () {
+      function hideSkeletonOnly() {
         const skel = document.getElementById('playerSkeleton');
-        if (skel && !skel.classList.contains('hidden') && video.readyState >= 2) {
+        if (skel && !skel.classList.contains('hidden')) {
           skel.classList.add('hidden');
         }
-      });
+      }
+      video.addEventListener('playing', hideSkeletonAndPoster);
+      video.addEventListener('canplay', hideSkeletonOnly);
+      video.addEventListener('loadeddata', hideSkeletonOnly);
+      video.addEventListener('loadedmetadata', hideSkeletonOnly);
       video.addEventListener('timeupdate', function () {
         if (video.currentTime > 0.05) hideSkeletonAndPoster();
       });

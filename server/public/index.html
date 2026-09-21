@@ -5147,13 +5147,19 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
+      justify-content: center;
       min-height: 0;
+      position: relative;
+    }
+    .phone-screen-container .vturb-skeleton-player {
+      background: #000000 !important;
     }
     .phone-screen-container iframe {
       width: 100%;
       border: none;
       display: block;
       flex-shrink: 0;
+      background: transparent;
     }
 
     .vturb-embed-tabs {
@@ -14454,6 +14460,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const mobCanvas = document.getElementById('vturbDetailsMobileCanvas');
       const deskFrame = document.getElementById('detailsPreviewFrame');
       const mobFrame = document.getElementById('detailsPreviewFrameMobile');
+      const deskSkeleton = document.getElementById('detailsPreviewSkeleton');
+      const mobSkeleton = document.getElementById('detailsMobileSkeleton');
+
       if (deskBtn) deskBtn.classList.toggle('active', !isMobile);
       if (mobBtn) mobBtn.classList.toggle('active', isMobile);
       if (deskCanvas) deskCanvas.style.display = isMobile ? 'none' : 'block';
@@ -14464,20 +14473,45 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const tokenPart = tok ? `&token=${encodeURIComponent(tok)}` : '';
         const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('cloudvturb_theme') || 'light';
         const playerSrc = `/player?id=${encodeURIComponent(currentDetailsVideoId)}&preview=1&theme=${encodeURIComponent(currentTheme)}${tokenPart}`;
+        const v = (videos || []).find(x => x.id === currentDetailsVideoId) || (topVideos || []).find(x => x.id === currentDetailsVideoId);
+
         if (isMobile) {
-          if (mobFrame && (!mobFrame.src || mobFrame.src.includes('about:blank') || !mobFrame.src.includes(`id=${currentDetailsVideoId}`))) {
-            mobFrame.src = playerSrc;
+          if (deskFrame && deskFrame.src && !deskFrame.src.includes('about:blank')) {
+            deskFrame.src = 'about:blank';
           }
-          if (deskFrame) deskFrame.src = 'about:blank';
-        } else {
-          if (deskFrame && (!deskFrame.src || deskFrame.src.includes('about:blank') || !deskFrame.src.includes(`id=${currentDetailsVideoId}`))) {
-            deskFrame.src = playerSrc;
+          if (mobSkeleton) mobSkeleton.classList.remove('hidden');
+          if (mobFrame) {
+            mobFrame.onload = () => {
+              if (mobSkeleton) mobSkeleton.classList.add('hidden');
+            };
+            if (!mobFrame.src || mobFrame.src.includes('about:blank') || !mobFrame.src.includes(`id=${currentDetailsVideoId}`)) {
+              mobFrame.src = playerSrc;
+            } else if (mobSkeleton) {
+              mobSkeleton.classList.add('hidden');
+            }
+            setTimeout(() => {
+              if (mobSkeleton) mobSkeleton.classList.add('hidden');
+            }, 800);
           }
-          if (mobFrame) mobFrame.src = 'about:blank';
-        }
-        const v = (videos || []).find(x => x.id === currentDetailsVideoId);
-        if (v && isMobile) {
           applyPhoneMockupAspect((v?.settings?.aspectRatio) || '16:9', ['vturbDetailsMobileCanvas']);
+        } else {
+          if (mobFrame && mobFrame.src && !mobFrame.src.includes('about:blank')) {
+            mobFrame.src = 'about:blank';
+          }
+          if (deskSkeleton) deskSkeleton.classList.remove('hidden');
+          if (deskFrame) {
+            deskFrame.onload = () => {
+              if (deskSkeleton) deskSkeleton.classList.add('hidden');
+            };
+            if (!deskFrame.src || deskFrame.src.includes('about:blank') || !deskFrame.src.includes(`id=${currentDetailsVideoId}`)) {
+              deskFrame.src = playerSrc;
+            } else if (deskSkeleton) {
+              deskSkeleton.classList.add('hidden');
+            }
+            setTimeout(() => {
+              if (deskSkeleton) deskSkeleton.classList.add('hidden');
+            }, 800);
+          }
         }
       }
     }
@@ -14525,37 +14559,6 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const tokenPart = tok ? `&token=${encodeURIComponent(tok)}` : '';
       const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('cloudvturb_theme') || 'light';
       const playerSrc = `/player?id=${encodeURIComponent(v.id)}&preview=1&theme=${encodeURIComponent(currentTheme)}${tokenPart}`;
-
-      const deskFrame = document.getElementById('detailsPreviewFrame');
-      const mobFrame = document.getElementById('detailsPreviewFrameMobile');
-      const deskSkeleton = document.getElementById('detailsPreviewSkeleton');
-      const mobSkeleton = document.getElementById('detailsMobileSkeleton');
-      const isMobileView = document.getElementById('btnDetailsDeviceMobile')?.classList.contains('active');
-
-      if (deskSkeleton) deskSkeleton.classList.remove('hidden');
-      if (mobSkeleton) mobSkeleton.classList.remove('hidden');
-
-      if (isMobileView) {
-        if (mobFrame) {
-          mobFrame.onload = () => { if (mobSkeleton) mobSkeleton.classList.add('hidden'); };
-          if (!mobFrame.src || mobFrame.src.includes('about:blank') || !mobFrame.src.includes(`id=${v.id}`)) {
-            mobFrame.src = playerSrc;
-          } else if (mobSkeleton) {
-            mobSkeleton.classList.add('hidden');
-          }
-        }
-        if (deskFrame) deskFrame.src = 'about:blank';
-      } else {
-        if (deskFrame) {
-          deskFrame.onload = () => { if (deskSkeleton) deskSkeleton.classList.add('hidden'); };
-          if (!deskFrame.src || deskFrame.src.includes('about:blank') || !deskFrame.src.includes(`id=${v.id}`)) {
-            deskFrame.src = playerSrc;
-          } else if (deskSkeleton) {
-            deskSkeleton.classList.add('hidden');
-          }
-        }
-        if (mobFrame) mobFrame.src = 'about:blank';
-      }
 
       const isVertical = v.settings && v.settings.aspectRatio === '9:16';
       const wrapper = document.getElementById('detailsPreviewWrapper');

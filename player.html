@@ -1045,6 +1045,26 @@
 
       applyAudioNoticeSettings(audioNoticeConfig);
 
+      function resumeAndPlay(targetTime) {
+        if (resumeModal) resumeModal.classList.remove('active');
+        hasUserUnmuted = true;
+        if (smartOverlay) smartOverlay.classList.add('hidden');
+        video.muted = false;
+        video.volume = 1;
+        video.currentTime = targetTime;
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.then(function () {
+            registerPlay();
+          }).catch(function () {
+            video.muted = true;
+            video.play().then(function () {
+              registerPlay();
+            }).catch(function () {});
+          });
+        }
+      }
+
       if (resumeModal) {
         resumeModal.style.setProperty('--resume-bg', resumeBgColor);
         resumeModal.style.setProperty('--resume-color', resumeTextColor);
@@ -1054,6 +1074,26 @@
         if (playEl) playEl.textContent = resumePlayText;
         const replayEl = document.getElementById('resumeReplayText');
         if (replayEl) replayEl.textContent = resumeReplayText;
+
+        if (hasSavedResume) {
+          resumeModal.classList.add('active');
+          if (smartOverlay) smartOverlay.classList.add('hidden');
+
+          if (btnResumeYes) {
+            btnResumeYes.onclick = function (e) {
+              if (e) e.stopPropagation();
+              resumeAndPlay(savedResumeTime);
+            };
+          }
+
+          if (btnResumeNo) {
+            btnResumeNo.onclick = function (e) {
+              if (e) e.stopPropagation();
+              try { localStorage.removeItem(storageKey); } catch (err) {}
+              resumeAndPlay(0);
+            };
+          }
+        }
       }
 
       window.addEventListener('message', function (e) {
@@ -1061,8 +1101,10 @@
         if (e.data.type === 'UPDATE_AUDIO_NOTICE') {
           applyAudioNoticeSettings(e.data.payload);
         } else if (e.data.type === 'SHOW_AUDIO_OVERLAY') {
-          hasUserUnmuted = false;
-          smartOverlay.classList.remove('hidden');
+          if (!hasSavedResume) {
+            hasUserUnmuted = false;
+            smartOverlay.classList.remove('hidden');
+          }
         }
       });
 
@@ -1143,7 +1185,7 @@
 
       let hlsInstance = null;
 
-      function loadHlsStream(streamUrl, startTime, autoplayAudio) {
+      function loadHlsStream(streamUrl, startTime, autoplayAudio, startPaused) {
         if (hlsInstance) {
           try { hlsInstance.destroy(); } catch (e) {}
           hlsInstance = null;
@@ -1163,6 +1205,10 @@
           hlsInstance.attachMedia(video);
           hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, function () {
             if (startTime > 0) video.currentTime = startTime;
+            if (startPaused) {
+              video.pause();
+              return;
+            }
             if (autoplayAudio) {
               video.muted = false;
               video.volume = 1;
@@ -1176,7 +1222,7 @@
               }).catch(function () {
                 video.muted = true;
                 video.play().catch(function () {});
-                if (smartOverlay && !hasUserUnmuted) {
+                if (smartOverlay && !hasUserUnmuted && !hasSavedResume) {
                   smartOverlay.classList.remove('hidden');
                 }
               });
@@ -1187,6 +1233,10 @@
           video.addEventListener('loadedmetadata', function onMeta() {
             video.removeEventListener('loadedmetadata', onMeta);
             if (startTime > 0) video.currentTime = startTime;
+            if (startPaused) {
+              video.pause();
+              return;
+            }
             if (autoplayAudio) {
               video.muted = false;
               video.volume = 1;
@@ -1200,7 +1250,7 @@
               }).catch(function () {
                 video.muted = true;
                 video.play().catch(function () {});
-                if (smartOverlay && !hasUserUnmuted) {
+                if (smartOverlay && !hasUserUnmuted && !hasSavedResume) {
                   smartOverlay.classList.remove('hidden');
                 }
               });
@@ -1209,6 +1259,10 @@
         } else if (videoSrc) {
           video.src = videoSrc;
           if (startTime > 0) video.currentTime = startTime;
+          if (startPaused) {
+            video.pause();
+            return;
+          }
           if (autoplayAudio) {
             video.muted = false;
             video.volume = 1;
@@ -1222,7 +1276,7 @@
             }).catch(function () {
               video.muted = true;
               video.play().catch(function () {});
-              if (smartOverlay && !hasUserUnmuted) {
+              if (smartOverlay && !hasUserUnmuted && !hasSavedResume) {
                 smartOverlay.classList.remove('hidden');
               }
             });
@@ -1266,7 +1320,7 @@
             }).catch(function () {
               video.muted = true;
               video.play().catch(function () {});
-              if (!hasUserUnmuted) {
+              if (!hasUserUnmuted && !hasSavedResume) {
                 smartOverlay.classList.remove('hidden');
               }
             });
@@ -1275,9 +1329,19 @@
       }
 
       const primaryStream = hlsSrc || videoSrc;
-      const shouldUseTeaser = smartAutoplay && smartAutoplaySrc && !hasUserUnmuted;
+      const shouldUseTeaser = !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hasUserUnmuted;
 
-      if (shouldUseTeaser) {
+      if (hasSavedResume) {
+        if (primaryStream) {
+          if (primaryStream.includes('.m3u8')) {
+            loadHlsStream(primaryStream, savedResumeTime, false, true);
+          } else {
+            video.src = primaryStream;
+            video.currentTime = savedResumeTime;
+            video.pause();
+          }
+        }
+      } else if (shouldUseTeaser) {
         if (hlsSrc) {
           fetch(hlsSrc, { mode: 'cors' }).catch(function () {});
         }
@@ -1292,7 +1356,7 @@
         }
       } else if (primaryStream) {
         if (primaryStream.includes('.m3u8')) {
-          loadHlsStream(primaryStream, 0, !smartAutoplay);
+          loadHlsStream(primaryStream, 0, !smartAutoplay, false);
         } else {
           video.src = primaryStream;
           startPlayback();
@@ -1327,6 +1391,9 @@
 
       let indicatorTimeout;
       playbackShield.addEventListener('click', function () {
+        if (resumeModal && resumeModal.classList.contains('active')) {
+          return;
+        }
         if (!hasUserUnmuted && smartAutoplay && !smartOverlay.classList.contains('hidden')) {
           unmuteAndRestart();
           return;
@@ -1353,7 +1420,6 @@
         }, 500);
       }
 
-      const storageKey = 'cloudvturb_pos_' + vidId;
       const pixelFired = { p25: false, p50: false, p75: false, p90: false, pitch: false };
       const milestonesFired = new Set();
 
@@ -1453,48 +1519,19 @@
         } catch (e) {}
       }
 
-      if (resumeEnabled) {
-        let resumePrompted = false;
-        function checkResume() {
-          if (resumePrompted) return;
-          try {
-            const savedTime = parseFloat(localStorage.getItem(storageKey));
-            const dur = video.duration || 100;
-            if (savedTime && savedTime > 5 && savedTime < (dur - 10)) {
-              resumePrompted = true;
-              resumeModal.classList.add('active');
-              video.pause();
-              if (smartOverlay) smartOverlay.classList.add('hidden');
-
-              btnResumeYes.onclick = function (e) {
-                if (e) e.stopPropagation();
-                resumeModal.classList.remove('active');
-                video.currentTime = savedTime;
-                video.muted = false;
-                video.volume = 1;
-                hasUserUnmuted = true;
-                if (smartOverlay) smartOverlay.classList.add('hidden');
-                video.play().catch(function () {});
-              };
-
-              btnResumeNo.onclick = function (e) {
-                if (e) e.stopPropagation();
-                localStorage.removeItem(storageKey);
-                resumeModal.classList.remove('active');
-                video.currentTime = 0;
-                video.muted = false;
-                video.volume = 1;
-                hasUserUnmuted = true;
-                if (smartOverlay) smartOverlay.classList.add('hidden');
-                video.play().catch(function () {});
-              };
+      if (resumeEnabled && hasSavedResume) {
+        video.addEventListener('loadedmetadata', function () {
+          if (video.duration && savedResumeTime >= video.duration - 5) {
+            try { localStorage.removeItem(storageKey); } catch (err) {}
+            if (resumeModal) resumeModal.classList.remove('active');
+            if (smartAutoplay && !hasUserUnmuted) {
+              if (smartOverlay) smartOverlay.classList.remove('hidden');
+              video.muted = true;
+              video.currentTime = 0;
+              video.play().catch(function () {});
             }
-          } catch (e) {}
-        }
-
-        video.addEventListener('loadedmetadata', checkResume);
-        video.addEventListener('canplay', checkResume);
-        if (video.readyState >= 1) checkResume();
+          }
+        });
       }
 
       video.addEventListener('ended', function () {

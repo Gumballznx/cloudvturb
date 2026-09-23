@@ -4433,9 +4433,10 @@ app.get('/api/analytics/video/:id/retention', authMiddleware, (req, res) => {
     trafficSearchClause = `AND (COALESCE(${activeTrafficCol}, 'Direto') LIKE '%${escaped}%')`;
   }
 
+  const baseFilter = BASE_DOMAIN ? `AND domain NOT LIKE '%${BASE_DOMAIN.replace(/'/g, "''")}'` : '';
   const trafficExpr = activeTrafficCol === 'domain'
     ? `CASE
-        WHEN domain IS NOT NULL AND domain != '' AND domain NOT LIKE 'dash.%' AND domain NOT LIKE '%roleta-sorte.online'
+        WHEN domain IS NOT NULL AND domain != '' AND domain NOT LIKE 'dash.%' ${baseFilter}
         THEN domain
         ELSE 'Direto'
       END`

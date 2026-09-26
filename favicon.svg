@@ -1,4 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <rect x="4" y="4" width="40" height="40" rx="10" fill="#2563EB"/>
-  <path d="M19 15L33 24L19 33V15Z" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A"/>
+      <stop offset="45%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#93C5FD" stop-opacity="0.10"/>
+    </linearGradient>
+    <linearGradient id="vGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#67E8F9"/>
+      <stop offset="60%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="whiteSpec" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0F172A" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Modern Squircle Base with Gradient and Inner Specular -->
+  <rect x="28" y="28" width="456" height="456" rx="108" fill="url(#bgGrad)" filter="url(#cardShadow)"/>
+  <rect x="30" y="30" width="452" height="452" rx="106" fill="none" stroke="url(#whiteSpec)" stroke-width="3"/>
+
+  <!-- Stylized Cloud Vector Shape (Perfect Smooth Path) -->
+  <path d="M180 348 C140 348 108 316 108 276 C108 238 138 206 175 204 C187 150 234 112 290 112 C354 112 406 162 408 226 C428 238 440 260 440 284 C440 319 412 348 376 348 Z" fill="url(#cloudGrad)"/>
+
+  <!-- Group with Drop Shadow for Brand Mark -->
+  <g filter="url(#glow)">
+    <!-- Stylized "C" Body in Pure White -->
+    <path d="M246 164 C192 164 148 205 148 256 C148 307 192 348 246 348 C273 348 296 337 312 320 L278 286 C269 295 258 300 246 300 C219 300 196 280 196 256 C196 232 219 212 246 212 C258 212 269 217 278 226 L312 192 C296 175 273 164 246 164 Z" fill="#FFFFFF"/>
+
+    <!-- Distinctive "V" / Turbine Forward Arrow (Interlocking with C) -->
+    <path d="M280 178 L374 256 L280 334 L306 256 Z" fill="url(#vGrad)"/>
+    <polygon points="288,214 346,256 288,298" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Online/Active Emerald Pip -->
+  <circle cx="396" cy="148" r="22" fill="#10B981" stroke="#1E3A8A" stroke-width="7"/>
+  <circle cx="396" cy="148" r="10" fill="#34D399"/>
 </svg>

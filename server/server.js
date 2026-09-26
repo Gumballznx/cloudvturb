@@ -300,6 +300,7 @@ try { db.exec('ALTER TABLE users ADD COLUMN owner_id INTEGER DEFAULT NULL'); } c
 const securityCols = [
   'google_connected INTEGER DEFAULT 0',
   'google_email TEXT DEFAULT NULL',
+  'google_id TEXT DEFAULT NULL',
   'two_factor_enabled INTEGER DEFAULT 0',
   'two_factor_secret TEXT DEFAULT NULL',
   'two_factor_temp_secret TEXT DEFAULT NULL',
@@ -1714,6 +1715,145 @@ app.post('/api/auth/login', (req, res) => {
       address_street: user.address_street,
       postal_code: user.postal_code,
       state_province: user.state_province,
+      avatar_url: user.avatar_url,
+      onboarding_completed: Boolean(user.onboarding_completed)
+    }
+  });
+});
+
+app.get('/api/auth/google/config', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '701955485147-qbtf3iptjn84862e7135i2j2s5b9ke68.apps.googleusercontent.com';
+  res.json({
+    enabled: Boolean(clientId),
+    clientId
+  });
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  const { credential, accessToken } = req.body || {};
+  if (!credential && !accessToken) {
+    return res.status(400).json({ error: 'Token do Google não fornecido.' });
+  }
+
+  let email = null;
+  let emailVerified = false;
+  let name = null;
+  let picture = null;
+  let googleId = null;
+
+  try {
+    if (credential) {
+      const gRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+      if (!gRes.ok) {
+        return res.status(401).json({ error: 'Token do Google inválido ou expirado.' });
+      }
+      const data = await gRes.json();
+      email = data.email;
+      emailVerified = data.email_verified === 'true' || data.email_verified === true;
+      name = data.name || data.given_name || (data.email ? data.email.split('@')[0] : 'Usuário');
+      picture = data.picture || null;
+      googleId = data.sub || null;
+    } else if (accessToken) {
+      const gRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!gRes.ok) {
+        return res.status(401).json({ error: 'Falha ao autenticar token de acesso do Google.' });
+      }
+      const data = await gRes.json();
+      email = data.email;
+      emailVerified = Boolean(data.email_verified);
+      name = data.name || data.given_name || (data.email ? data.email.split('@')[0] : 'Usuário');
+      picture = data.picture || null;
+      googleId = data.sub || null;
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao validar credenciais com o Google: ' + err.message });
+  }
+
+  if (!email || !emailVerified) {
+    return res.status(400).json({ error: 'Conta Google sem e-mail verificado.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail);
+
+  if (!user) {
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    const isFirstUser = userCount === 0;
+    const requireApproval = getSetting('require_approval', '1') === '1';
+    const role = isFirstUser ? 'owner' : 'member';
+    const status = isFirstUser ? 'approved' : (requireApproval ? 'pending' : 'approved');
+    const nowIso = new Date().toISOString();
+    const randomPassHash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
+
+    const info = db.prepare(`
+      INSERT INTO users (name, email, password_hash, role, status, avatar_url, google_connected, google_email, google_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+    `).run(name, cleanEmail, randomPassHash, role, status, picture, cleanEmail, googleId, nowIso);
+
+    user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+
+    if (status === 'pending') {
+      return res.json({
+        success: true,
+        pendingApproval: true,
+        message: 'Cadastro realizado via Google! Aguarde a aprovação do Administrador para acessar a plataforma.'
+      });
+    }
+  } else {
+    if (user.status === 'blocked') {
+      return res.status(403).json({ error: 'Sua conta foi desativada pelo Administrador.' });
+    }
+    if (user.status === 'pending') {
+      return res.status(403).json({ error: 'Sua conta está aguardando aprovação do Administrador.' });
+    }
+
+    const updateAvatar = (!user.avatar_url && picture) ? picture : user.avatar_url;
+    db.prepare('UPDATE users SET google_connected = 1, google_email = ?, google_id = COALESCE(?, google_id), avatar_url = ? WHERE id = ?')
+      .run(cleanEmail, googleId, updateAvatar, user.id);
+    user.avatar_url = updateAvatar;
+  }
+
+  if (user.two_factor_enabled) {
+    const tempToken = jwt.sign({ id: user.id, isTemp2FA: true }, JWT_SECRET, { expiresIn: '10m' });
+    return res.json({
+      requires2FA: true,
+      tempToken,
+      message: 'Digite o código de 6 dígitos do seu aplicativo autenticador.'
+    });
+  }
+
+  if (user.owner_id) {
+    const owner = db.prepare('SELECT require_member_2fa FROM users WHERE id = ?').get(user.owner_id);
+    if (owner && owner.require_member_2fa && !user.two_factor_enabled) {
+      const tempToken = jwt.sign({ id: user.id, isTempSetup2FA: true }, JWT_SECRET, { expiresIn: '15m' });
+      return res.json({
+        requiresSetup2FA: true,
+        tempToken,
+        email: user.email,
+        message: 'Sua organização exige que você ative a autenticação de dois fatores antes de acessar.'
+      });
+    }
+  }
+
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '30d' });
+  res.json({
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      full_name: user.full_name,
+      country: user.country,
+      phone: user.phone,
+      address_street: user.address_street,
+      postal_code: user.postal_code,
+      state_province: user.state_province,
+      avatar_url: user.avatar_url,
       onboarding_completed: Boolean(user.onboarding_completed)
     }
   });

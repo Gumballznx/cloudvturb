@@ -3093,11 +3093,15 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
     };
   });
 
+  const totalLimitGb = Math.round(totalLimitBytes / (1024 * 1024 * 1024));
+  const totalFormatted = `${totalLimitGb} GB`;
+
   res.json({
     scope: isOwner ? 'global' : 'individual',
     isOwner,
     totalBytes: totalLimitBytes,
-    totalFormatted: isOwner ? '30 GB' : '3 GB',
+    totalGB: totalLimitGb,
+    totalFormatted,
     usedBytes,
     formattedUsage: formatStorage(usedBytes),
     freeBytes,
@@ -4306,6 +4310,8 @@ app.get('/api/analytics/overview', authMiddleware, (req, res) => {
     usedStorage: {
       usedBytes,
       totalBytes,
+      totalFormatted: formatStorage(totalBytes),
+      totalGB: Math.round(totalBytes / (1024 * 1024 * 1024)),
       formatted: formatStorage(usedBytes),
       isIndividual: !isOwner
     }

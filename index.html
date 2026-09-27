@@ -6649,8 +6649,8 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
           </div>
           <div class="metric-card">
             <div class="metric-title">Espaço Livre</div>
-            <div class="metric-value" id="storageCardFree" style="color: #10b981;">0 GB</div>
-            <div class="metric-sub" id="storageCardTotal">Disponível de 30 GB</div>
+            <div class="metric-value" id="storageCardFree" style="color: #10b981;">-</div>
+            <div class="metric-sub" id="storageCardTotal">Disponível</div>
           </div>
           <div class="metric-card">
             <div class="metric-title">Vídeos com Armazenamento</div>
@@ -6668,9 +6668,9 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; font-weight: 600; margin-bottom: 10px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="color: var(--text-main);">Capacidade Utilizada:</span>
-              <span id="storageDetailedUsage" style="color: var(--color-primary); font-weight: 700;">0 MB</span>
+              <span id="storageDetailedUsage" style="color: var(--color-primary); font-weight: 700;">-</span>
               <span style="color: var(--text-dim);">de</span>
-              <span id="storageCapacityLabel" style="color: var(--text-main);">30 GB</span>
+              <span id="storageCapacityLabel" style="color: var(--text-main);">-</span>
             </div>
             <span id="storageProgressPctLabel" style="color: var(--text-muted); font-size: 13px;">0%</span>
           </div>
@@ -7101,12 +7101,12 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-bottom: 24px;">
                 <div class="form-row">
                   <label class="form-label" for="cfgServerLimitGb">Limite Total do Servidor (GB)</label>
-                  <input type="number" min="1" max="100000" step="1" id="cfgServerLimitGb" class="form-input-text" placeholder="30" style="padding: 10px 14px;">
+                  <input type="number" min="1" max="100000" step="1" id="cfgServerLimitGb" class="form-input-text" placeholder="GB" style="padding: 10px 14px;">
                   <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">Espaço total disponível somando todos os vídeos do servidor.</span>
                 </div>
                 <div class="form-row">
                   <label class="form-label" for="cfgMemberLimitGb">Cota Padrão por Membro (GB)</label>
-                  <input type="number" min="1" max="10000" step="1" id="cfgMemberLimitGb" class="form-input-text" placeholder="3" style="padding: 10px 14px;">
+                  <input type="number" min="1" max="10000" step="1" id="cfgMemberLimitGb" class="form-input-text" placeholder="GB" style="padding: 10px 14px;">
                   <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">Limite máximo de vídeos que cada usuário comum pode hospedar.</span>
                 </div>
               </div>
@@ -7114,7 +7114,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               <div id="storageOverviewBox" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                   <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">Uso Atual do Armazenamento</span>
-                  <span id="storageOverviewLabel" style="font-size: 13px; font-weight: 700; color: var(--color-primary);">0 GB / 30 GB</span>
+                  <span id="storageOverviewLabel" style="font-size: 13px; font-weight: 700; color: var(--color-primary);">-</span>
                 </div>
                 <div style="width: 100%; height: 8px; background: var(--border-subtle); border-radius: 9999px; overflow: hidden;">
                   <div id="storageOverviewBar" style="width: 0%; height: 100%; background: var(--color-primary); border-radius: 9999px; transition: width 0.3s ease;"></div>
@@ -10036,15 +10036,15 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function applyStorageUI(s, isOwnerOverride) {
       if (!s) return;
       const isOwner = isOwnerOverride !== undefined ? isOwnerOverride : (s.isOwner !== undefined ? s.isOwner : (currentUser && currentUser.role === 'owner'));
-      const totalFormatted = s.totalFormatted || (isOwner ? '30 GB' : '3 GB');
-      const formattedUsage = s.formattedUsage || '0 MB';
-      const usageText = `${formattedUsage} / ${totalFormatted}`;
+      const totalFormatted = s.totalFormatted || (s.totalGB ? `${s.totalGB} GB` : (s.totalBytes ? formatFileSize(s.totalBytes) : '-'));
+      const formattedUsage = s.formattedUsage || (s.usedBytes !== undefined ? formatFileSize(s.usedBytes) : '0 MB');
+      const usageText = totalFormatted && totalFormatted !== '-' ? `${formattedUsage} / ${totalFormatted}` : formattedUsage;
       const miniEl = document.getElementById('miniStorageUsageLabel');
       if (miniEl) miniEl.textContent = usageText;
       const detUsage = document.getElementById('storageDetailedUsage');
       if (detUsage) detUsage.textContent = `${formattedUsage} usados`;
       const capLabel = document.getElementById('storageCapacityLabel');
-      if (capLabel) capLabel.textContent = isOwner ? 'Capacidade do Servidor: 30 GB' : 'Sua Cota Individual: 3 GB';
+      if (capLabel) capLabel.textContent = isOwner ? `Capacidade do Servidor: ${totalFormatted}` : `Sua Cota Individual: ${totalFormatted}`;
       const pct = Math.min(100, Math.max(s.usedBytes > 0 ? 1 : 0, parseFloat(s.usagePercent || '0')));
       const miniBar = document.getElementById('miniStorageProgressBar');
       if (miniBar) miniBar.style.width = `${pct}%`;
@@ -10070,12 +10070,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function renderStorageUI(data) {
       if (!data) return;
       const isOwner = data.isOwner;
+      const totalFormatted = data.totalFormatted || (data.totalGB ? `${data.totalGB} GB` : (data.totalBytes ? formatFileSize(data.totalBytes) : '-'));
 
       const titleEl = document.getElementById('storageSectionTitle');
       if (titleEl) titleEl.textContent = isOwner ? 'Armazenamento do Servidor' : 'Meu Armazenamento';
 
       const badgeEl = document.getElementById('storageScopeBadge');
-      if (badgeEl) badgeEl.textContent = isOwner ? 'Servidor Global (30 GB)' : 'Cota Individual (3 GB)';
+      if (badgeEl) badgeEl.textContent = isOwner ? `Servidor Global (${totalFormatted})` : `Cota Individual (${totalFormatted})`;
 
       const cardUsed = document.getElementById('storageCardUsed');
       if (cardUsed) cardUsed.textContent = data.formattedUsage || '0 MB';
@@ -10087,7 +10088,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (cardFree) cardFree.textContent = data.formattedFree || '0 GB';
 
       const cardTotal = document.getElementById('storageCardTotal');
-      if (cardTotal) cardTotal.textContent = `Disponível de ${data.totalFormatted || (isOwner ? '30 GB' : '3 GB')}`;
+      if (cardTotal) cardTotal.textContent = `Disponível de ${totalFormatted}`;
 
       const cardCount = document.getElementById('storageCardVideosCount');
       if (cardCount) cardCount.textContent = data.videosCount || 0;
@@ -10106,7 +10107,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (detUsage) detUsage.textContent = `${data.formattedUsage || '0 MB'} usados`;
 
       const capLabel = document.getElementById('storageCapacityLabel');
-      if (capLabel) capLabel.textContent = isOwner ? 'Capacidade do Servidor: 30 GB' : `Sua Cota Individual: ${data.totalFormatted || '3 GB'}`;
+      if (capLabel) capLabel.textContent = isOwner ? `Capacidade do Servidor: ${totalFormatted}` : `Sua Cota Individual: ${totalFormatted}`;
 
       const pct = Math.min(100, Math.max(data.usedBytes > 0 ? 1 : 0, parseFloat(data.usagePercent || '0')));
       const detFill = document.getElementById('storageDetailedFill');
@@ -16556,8 +16557,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const st = data.storage;
         const srvInput = document.getElementById('cfgServerLimitGb');
         const memInput = document.getElementById('cfgMemberLimitGb');
-        if (srvInput) srvInput.value = st.serverLimitGb || 30;
-        if (memInput) memInput.value = st.memberLimitGb || 3;
+        if (srvInput) srvInput.value = st.serverLimitGb !== undefined ? st.serverLimitGb : '';
+        if (memInput) memInput.value = st.memberLimitGb !== undefined ? st.memberLimitGb : '';
 
         const driver = st.storageDriver || 'local';
         const radio = document.querySelector(`input[name="storageDriverRadio"][value="${driver}"]`);
@@ -16586,8 +16587,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const btn = document.getElementById('btnSaveStorageSettings');
       setButtonLoading(btn, true, 'Salvando...');
       try {
-        const serverLimitGb = parseFloat(document.getElementById('cfgServerLimitGb')?.value || '30');
-        const memberLimitGb = parseFloat(document.getElementById('cfgMemberLimitGb')?.value || '3');
+        const srvVal = document.getElementById('cfgServerLimitGb')?.value;
+        const memVal = document.getElementById('cfgMemberLimitGb')?.value;
+        const serverLimitGb = srvVal !== '' && srvVal !== undefined && !isNaN(parseFloat(srvVal)) ? parseFloat(srvVal) : undefined;
+        const memberLimitGb = memVal !== '' && memVal !== undefined && !isNaN(parseFloat(memVal)) ? parseFloat(memVal) : undefined;
         const storageDriver = document.querySelector('input[name="storageDriverRadio"]:checked')?.value || 'local';
         const s3Endpoint = document.getElementById('cfgS3Endpoint')?.value || '';
         const s3Bucket = document.getElementById('cfgS3Bucket')?.value || '';

@@ -2065,9 +2065,56 @@ app.get('/api/admin/users', authMiddleware, ownerMiddleware, (req, res) => {
         videoCount
       };
     });
-    res.json({ users: usersWithStorage });
+
+    const totalCount = users.length;
+    const pendingCount = users.filter(u => (u.status || 'pending').toLowerCase() === 'pending').length;
+    const approvedCount = users.filter(u => (u.status || '').toLowerCase() === 'approved').length;
+
+    res.json({
+      users: usersWithStorage,
+      totalCount,
+      pendingCount,
+      approvedCount
+    });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao listar usuários: ' + err.message });
+  }
+});
+
+app.post('/api/admin/users/approve-all', authMiddleware, ownerMiddleware, async (req, res) => {
+  try {
+    const pendingUsers = db.prepare("SELECT id, name, email FROM users WHERE status = 'pending'").all();
+    if (!pendingUsers.length) {
+      return res.json({ success: true, count: 0, message: 'Nenhum usuário pendente para aprovar.' });
+    }
+
+    db.prepare("UPDATE users SET status = 'approved' WHERE status = 'pending'").run();
+
+    for (const u of pendingUsers) {
+      sendUserActionEmail({
+        to: u.email,
+        name: u.name,
+        action: 'approve',
+        reason: '',
+        adminName: req.user.name
+      }).catch(() => {});
+
+      const notif = {
+        type: 'approval',
+        title: 'Conta Aprovada!',
+        message: 'Sua conta foi aprovada pelo Administrador. Bem-vindo à plataforma!',
+        created_at: new Date().toISOString(),
+        read: 0
+      };
+      try {
+        db.prepare(`INSERT INTO user_notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)`)
+          .run(u.id, notif.type, notif.title, notif.message);
+      } catch (e) {}
+    }
+
+    res.json({ success: true, count: pendingUsers.length, message: `${pendingUsers.length} usuários aprovados com sucesso!` });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao aprovar usuários: ' + err.message });
   }
 });
 

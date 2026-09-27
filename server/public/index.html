@@ -6553,16 +6553,37 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
 
       <section class="tab-view" id="viewUsers">
         <div class="card-panel">
-          <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-            <div class="panel-title">Gestão de Usuários & Aprovações</div>
-            <button type="button" class="btn-clean-secondary" id="btnRefreshUsers" onclick="refreshUsersTable()" title="Atualizar lista de usuários" style="display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer;">
-              <svg id="refreshUsersIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M23 4v6h-6"></path>
-                <path d="M1 20v-6h6"></path>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-              <span>Atualizar</span>
-            </button>
+          <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+              <div class="panel-title" style="margin: 0;">Gestão de Usuários & Aprovações</div>
+              <div id="usersStatsContainer" style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;">
+                <span style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 4px 12px; border-radius: 9999px; color: var(--text-main);">
+                  Total: <strong id="usersStatTotal" style="color: var(--color-primary);">0</strong>
+                </span>
+                <span style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); padding: 4px 12px; border-radius: 9999px; color: #10b981;">
+                  Aprovados: <strong id="usersStatApproved">0</strong>
+                </span>
+                <span id="usersStatPendingBadge" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); padding: 4px 12px; border-radius: 9999px; color: #f59e0b; display: none;">
+                  Pendentes: <strong id="usersStatPending">0</strong>
+                </span>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <button type="button" class="btn-primary-action" id="btnApproveAllUsers" onclick="approveAllPendingUsers()" style="display: none; background: #10b981; border-color: #10b981; font-size: 13px; font-weight: 700; padding: 7px 14px; gap: 6px; align-items: center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Aprovar Todos (<span id="btnApproveAllCount">0</span>)</span>
+              </button>
+
+              <button type="button" class="btn-clean-secondary" id="btnRefreshUsers" onclick="refreshUsersTable()" title="Atualizar lista de usuários" style="display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer;">
+                <svg id="refreshUsersIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span>Atualizar</span>
+              </button>
+            </div>
           </div>
 
           <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px 20px; margin-bottom: 20px;">
@@ -16251,6 +16272,24 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
+    async function approveAllPendingUsers() {
+      const btn = document.getElementById('btnApproveAllUsers');
+      const count = document.getElementById('btnApproveAllCount')?.textContent || '';
+      if (!confirm(`Deseja aprovar todos os ${count} usuários pendentes de uma só vez? Eles receberão o e-mail de confirmação imediatamente.`)) {
+        return;
+      }
+      setButtonLoading(btn, true, 'Aprovando...');
+      try {
+        const res = await api('/api/admin/users/approve-all', { method: 'POST' });
+        showToast(res.message || 'Todos os usuários pendentes foram aprovados com sucesso!');
+        await loadUsersTable();
+      } catch (err) {
+        showToast('Erro ao aprovar usuários: ' + (err.message || err), true);
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    }
+
     async function loadUsersTable() {
       const tbody = document.getElementById('usersListBody');
       if (!currentUser) {
@@ -16269,6 +16308,27 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         tbody.innerHTML = '';
 
         const usersList = data.users || [];
+        const totalUsers = data.totalCount !== undefined ? data.totalCount : usersList.length;
+        const pendingUsers = data.pendingCount !== undefined ? data.pendingCount : usersList.filter(u => (u.status || 'pending').toLowerCase() === 'pending').length;
+        const approvedUsers = data.approvedCount !== undefined ? data.approvedCount : usersList.filter(u => (u.status || '').toLowerCase() === 'approved').length;
+
+        const elTotal = document.getElementById('usersStatTotal');
+        const elAppr = document.getElementById('usersStatApproved');
+        const elPend = document.getElementById('usersStatPending');
+        const elPendBadge = document.getElementById('usersStatPendingBadge');
+        const btnApproveAll = document.getElementById('btnApproveAllUsers');
+        const btnApproveAllCount = document.getElementById('btnApproveAllCount');
+
+        if (elTotal) elTotal.textContent = totalUsers;
+        if (elAppr) elAppr.textContent = approvedUsers;
+        if (elPend) elPend.textContent = pendingUsers;
+        if (elPendBadge) elPendBadge.style.display = pendingUsers > 0 ? 'inline-block' : 'none';
+
+        if (btnApproveAll) {
+          btnApproveAll.style.display = pendingUsers > 0 ? 'inline-flex' : 'none';
+          if (btnApproveAllCount) btnApproveAllCount.textContent = pendingUsers;
+        }
+
         if (!usersList.length) {
           tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text-muted);">Nenhum usuário cadastrado na plataforma.</td></tr>';
           return;

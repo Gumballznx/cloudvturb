@@ -979,6 +979,7 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   const fromEmail = getSystemFromEmail();
 
   const labels = {
+    approve: { subject: 'Sua conta foi aprovada! Bem-vindo ao CloudVTurb', title: 'Conta Aprovada!', color: '#10b981', desc: 'Parabéns! Sua conta na plataforma CloudVTurb foi aprovada pelo Administrador. Você já pode fazer login e acessar todos os recursos para hospedar suas VSLs de alta retenção.' },
     block: { subject: 'Sua conta foi bloqueada', title: 'Conta Bloqueada', color: '#ef4444', icon: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01', desc: 'O acesso à sua conta na plataforma CloudVTurb foi suspenso pelo administrador.' },
     delete: { subject: 'Sua conta foi removida', title: 'Conta Removida', color: '#ef4444', icon: 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2', desc: 'Sua conta na plataforma CloudVTurb foi removida pelo administrador.' },
     make_owner: { subject: 'Voce foi promovido a Administrador', title: 'Promovido a Administrador', color: '#2563eb', icon: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z', desc: 'Parabens! Voce foi promovido a Administrador (Owner) na plataforma CloudVTurb.' }
@@ -987,6 +988,9 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   const info = labels[action];
   if (!info) return;
 
+  const loginUrl = `https://${DASH_DOMAIN || 'dash.cloudvturb.online'}/login`;
+  const actionButton = action === 'approve' ? `<div style="text-align:center;margin:28px 0 24px 0;"><a href="${loginUrl}" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;">Acessar Plataforma &rarr;</a></div>` : '';
+
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${info.title}</title></head>
 <body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
   <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
@@ -994,6 +998,7 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
     <h2 style="font-size:18px;font-weight:700;color:#09090b;margin:0 0 12px 0;">${info.title}</h2>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Ola${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 24px 0;">${info.desc}</p>
+    ${actionButton}
     ${reason ? `<div style="background:#f8fafc;border-left:3px solid ${info.color};border-radius:4px;padding:14px 16px;margin-bottom:24px;"><p style="font-size:13px;font-weight:600;color:#09090b;margin:0 0 6px 0;">Motivo informado pelo administrador:</p><p style="font-size:13px;color:#52525b;margin:0;">${escapeHtml(reason)}</p></div>` : ''}
     <p style="font-size:13px;color:#71717a;margin:0 0 24px 0;">Esta acao foi executada por <strong>${escapeHtml(adminName || 'Administrador')}</strong>. Para duvidas, entre em contato com o suporte da plataforma.</p>
     <div style="font-size:12px;color:#a1a1aa;border-top:1px solid #f4f4f5;padding-top:16px;">CloudVTurb - Plataforma de VSLs e Hospedagem de Alta Retencao</div>
@@ -2081,21 +2086,21 @@ app.post('/api/admin/users/:id/action', authMiddleware, ownerMiddleware, async (
     db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
   }
 
-  if (target && (action === 'block' || action === 'delete' || action === 'make_owner')) {
+  if (target && (action === 'approve' || action === 'block' || action === 'delete' || action === 'make_owner')) {
     sendUserActionEmail({
       to: target.email,
       name: target.name,
       action,
-      reason: String(reason).trim(),
+      reason: String(reason || '').trim(),
       adminName: req.user.name
     }).catch(() => {});
 
-    if (action === 'make_owner') {
+    if (action === 'make_owner' || action === 'approve') {
+      const isOwner = action === 'make_owner';
       const notif = {
-        id: Date.now(),
-        type: 'promotion',
-        title: 'Voce foi promovido a Administrador',
-        message: String(reason).trim() || 'Parabens pela promocao!',
+        type: isOwner ? 'promotion' : 'approval',
+        title: isOwner ? 'Voce foi promovido a Administrador' : 'Conta Aprovada!',
+        message: isOwner ? (String(reason).trim() || 'Parabens pela promocao!') : 'Sua conta foi aprovada pelo Administrador. Bem-vindo à plataforma!',
         created_at: new Date().toISOString(),
         read: 0
       };

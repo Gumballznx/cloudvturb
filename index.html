@@ -6553,8 +6553,16 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
 
       <section class="tab-view" id="viewUsers">
         <div class="card-panel">
-          <div class="panel-header">
+          <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
             <div class="panel-title">Gestão de Usuários & Aprovações</div>
+            <button type="button" class="btn-clean-secondary" id="btnRefreshUsers" onclick="refreshUsersTable()" title="Atualizar lista de usuários" style="display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer;">
+              <svg id="refreshUsersIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>Atualizar</span>
+            </button>
           </div>
 
           <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px 20px; margin-bottom: 20px;">
@@ -16129,6 +16137,22 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
 
       showToast('Selecione ao menos um arquivo de vídeo ou informe uma URL.', true);
+    }
+
+    async function refreshUsersTable() {
+      const btn = document.getElementById('btnRefreshUsers');
+      const icon = document.getElementById('refreshUsersIcon');
+      if (icon) icon.style.animation = 'spin 0.7s linear infinite';
+      if (btn) btn.disabled = true;
+      try {
+        await loadUsersTable();
+        showToast('Lista de usuários atualizada com sucesso!');
+      } catch (err) {
+        showToast('Erro ao atualizar lista: ' + (err.message || err), true);
+      } finally {
+        if (icon) icon.style.animation = '';
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function loadUsersTable() {

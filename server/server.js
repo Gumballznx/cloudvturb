@@ -1736,7 +1736,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.get('/api/auth/google/config', (req, res) => {
-  const clientId = process.env.GOOGLE_CLIENT_ID || '701955485147-qbtf3iptjn84862e7135i2j2s5b9ke68.apps.googleusercontent.com';
+  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
   res.json({
     enabled: Boolean(clientId),
     clientId

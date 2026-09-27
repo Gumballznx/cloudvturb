@@ -19,14 +19,9 @@
       var hasToken = false;
       try { hasToken = !!localStorage.getItem('cloudvturb_token'); } catch (e) {}
 
-      if (p === '/login' || p === '/cadastro' || p === '/verificar-cadastro') {
-        try {
-          localStorage.removeItem('cloudvturb_token');
-          localStorage.removeItem('cloudvturb_user');
-          localStorage.removeItem('cloudvturb_storage');
-          localStorage.removeItem('cloudvturb_overview');
-          localStorage.removeItem('cloudvturb_top_videos');
-        } catch (e) {}
+      if (hasToken && (p === '/login' || p === '/cadastro')) {
+        document.documentElement.classList.add('auth-pending');
+      } else if (p === '/login' || p === '/cadastro' || p === '/verificar-cadastro') {
         document.documentElement.classList.add('auth-pending');
         if (p === '/cadastro') {
           document.documentElement.classList.add('auth-mode-register');
@@ -8928,6 +8923,46 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const p = window.location.pathname.replace(/\/$/, '') || '/';
       const isAuthRoute = p === '/login' || p === '/cadastro' || p === '/verificar-cadastro';
 
+      if (token && (p === '/login' || p === '/cadastro')) {
+        try {
+          const me = await api('/api/auth/me');
+          if (me && me.user && me.user.status === 'approved') {
+            currentUser = me.user;
+            try { localStorage.setItem('cloudvturb_user', JSON.stringify(currentUser)); } catch (e) {}
+            document.documentElement.classList.remove('auth-pending', 'auth-mode-register');
+            const backdrop = document.getElementById('authBackdrop');
+            if (backdrop) backdrop.style.display = 'none';
+            setupUserHeader();
+
+            fetch('/api/config').then(r => r.json()).then(cfg => {
+              appConfig = cfg || appConfig;
+              const sbAppEl = document.getElementById('sidebarAppName');
+              if (sbAppEl) sbAppEl.textContent = appConfig.appName || 'CloudVTurb';
+              const cfgAppInput = document.getElementById('cfgAppNameInput');
+              if (cfgAppInput) cfgAppInput.value = appConfig.appName || 'CloudVTurb';
+              const cfgDomainInput = document.getElementById('cfgBaseDomainInput');
+              if (cfgDomainInput) cfgDomainInput.value = appConfig.baseDomain || window.location.hostname;
+            }).catch(() => {});
+
+            if (currentUser.onboarding_completed === false) {
+              startOnboarding();
+            } else {
+              navigateTo('overview', false);
+              history.replaceState(null, '', '/');
+            }
+            loadAllDashboardData();
+            loadUserNotifications();
+            return;
+          }
+        } catch (e) {
+          token = '';
+          try {
+            localStorage.removeItem('cloudvturb_token');
+            localStorage.removeItem('cloudvturb_user');
+          } catch (err) {}
+        }
+      }
+
       if (isAuthRoute) {
         token = '';
         try {
@@ -9849,6 +9884,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const p = window.location.pathname.replace(/\/$/, '') || '/';
 
       if (p === '/login' || p === '/cadastro' || p === '/verificar-cadastro') {
+        if (currentUser && currentUser.status === 'approved') {
+          navigateTo('overview', false);
+          history.replaceState(null, '', '/');
+          return;
+        }
         document.documentElement.classList.add('auth-pending');
         if (p === '/verificar-cadastro') {
           showAuth('verify_register');

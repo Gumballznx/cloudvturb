@@ -261,6 +261,21 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS auth_security_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identifier TEXT NOT NULL,
+    attempt_type TEXT NOT NULL,
+    ip TEXT NOT NULL,
+    user_agent TEXT,
+    device_type TEXT,
+    is_mobile INTEGER DEFAULT 0,
+    success INTEGER DEFAULT 0,
+    risk_score REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_auth_sec_ident_time ON auth_security_logs(identifier, created_at);
+  CREATE INDEX IF NOT EXISTS idx_auth_sec_ip_time ON auth_security_logs(ip, created_at);
   CREATE INDEX IF NOT EXISTS idx_verification_email_type ON verification_codes(email, type);
   CREATE INDEX IF NOT EXISTS idx_team_invites_owner ON team_invites(owner_id);
   CREATE INDEX IF NOT EXISTS idx_team_invites_token ON team_invites(token);
@@ -930,7 +945,105 @@ function autoCheckPendingHls() {
     }
   } catch (e) {}
 }
-setTimeout(autoCheckPendingHls, 3000);
+function getClientIp(req) {
+  const cf = req.headers['cf-connecting-ip'];
+  const xf = req.headers['x-forwarded-for'];
+  const xr = req.headers['x-real-ip'];
+  if (cf) return String(cf).trim();
+  if (xf) return String(xf).split(',')[0].trim();
+  if (xr) return String(xr).trim();
+  return req.ip || req.connection?.remoteAddress || '127.0.0.1';
+}
+
+function analyzeRequestDevice(req) {
+  const ua = req.headers['user-agent'] || '';
+  const isMobile = /mobile|iphone|ipod|android|blackberry|opera mini|iemobile|wpdesktop/i.test(ua) ? 1 : 0;
+  const isBot = /curl|wget|python|postman|insomnia|scrapy|bot|crawler|spider|headless/i.test(ua) ? 1 : 0;
+  let device = 'Desktop';
+  if (/iphone|ipad|ipod/i.test(ua)) device = 'iOS';
+  else if (/android/i.test(ua)) device = 'Android';
+  else if (/windows/i.test(ua)) device = 'Windows';
+  else if (/macintosh|mac os x/i.test(ua)) device = 'macOS';
+  else if (/linux/i.test(ua)) device = 'Linux';
+  return { ua, isMobile, isBot, device };
+}
+
+function calculateSecurityRiskAndRateLimit(req, identifier, attemptType) {
+  const ip = getClientIp(req);
+  const { ua, isMobile, isBot, device } = analyzeRequestDevice(req);
+
+  try {
+    const ipStats = db.prepare(`
+      SELECT COUNT(*) as failures, MAX(created_at) as last_attempt
+      FROM auth_security_logs
+      WHERE ip = ? AND success = 0 AND created_at >= datetime('now', '-15 minutes')
+    `).get(ip) || { failures: 0, last_attempt: null };
+
+    const acctStats = identifier ? (db.prepare(`
+      SELECT COUNT(*) as failures, MAX(created_at) as last_attempt
+      FROM auth_security_logs
+      WHERE identifier = ? AND success = 0 AND created_at >= datetime('now', '-15 minutes')
+    `).get(identifier) || { failures: 0, last_attempt: null }) : { failures: 0, last_attempt: null };
+
+    let riskScore = 0;
+    if (isBot) riskScore += 45;
+    if (ipStats.failures >= 3) riskScore += 20;
+    if (ipStats.failures >= 6) riskScore += 30;
+    if (acctStats.failures >= 3) riskScore += 25;
+
+    const lastTime = acctStats.last_attempt ? new Date(acctStats.last_attempt).getTime() : 0;
+    const now = Date.now();
+    if (lastTime > 0 && (now - lastTime) < 800) {
+      riskScore += 35;
+    }
+
+    if (acctStats.failures >= 5) {
+      return {
+        allowed: false,
+        status: 429,
+        riskScore,
+        error: 'Conta temporariamente bloqueada por excesso de tentativas. Aguarde 15 minutos ou recupere a senha.',
+        retryAfter: 900
+      };
+    }
+
+    if (ipStats.failures >= 10) {
+      return {
+        allowed: false,
+        status: 429,
+        riskScore,
+        error: 'Muitas tentativas a partir deste endereço IP. Por favor, aguarde alguns minutos.',
+        retryAfter: 600
+      };
+    }
+
+    const backoffDelay = (acctStats.failures >= 3 || ipStats.failures >= 4) ? Math.min((acctStats.failures + ipStats.failures) * 400, 3000) : 0;
+
+    return {
+      allowed: true,
+      riskScore,
+      backoffDelay,
+      deviceInfo: { ip, ua, isMobile, isBot, device }
+    };
+  } catch (err) {
+    return { allowed: true, riskScore: 0, backoffDelay: 0, deviceInfo: { ip, ua, isMobile, isBot, device } };
+  }
+}
+
+function recordSecurityAttempt(req, identifier, attemptType, success, riskScore = 0) {
+  try {
+    const ip = getClientIp(req);
+    const { ua, isMobile, device } = analyzeRequestDevice(req);
+    db.prepare(`
+      INSERT INTO auth_security_logs (identifier, attempt_type, ip, user_agent, device_type, is_mobile, success, risk_score)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(identifier || 'unknown', attemptType, ip, ua ? ua.slice(0, 250) : null, device, isMobile, success ? 1 : 0, riskScore || 0);
+
+    if (Math.random() < 0.05) {
+      db.prepare("DELETE FROM auth_security_logs WHERE created_at < datetime('now', '-2 days')").run();
+    }
+  } catch (err) {}
+}
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -1429,12 +1542,22 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/auth/verify-register', (req, res) => {
+app.post('/api/auth/verify-register', async (req, res) => {
   const { email, code } = req.body || {};
   if (!email || !code) return res.status(400).json({ error: 'Informe o e-mail e o código de 8 dígitos.' });
 
   const cleanEmail = String(email).trim().toLowerCase();
   const cleanCode = String(code).trim().replace(/\D/g, '');
+
+  const secCheck = calculateSecurityRiskAndRateLimit(req, `register:${cleanEmail}`, 'verify_register');
+  if (!secCheck.allowed) {
+    if (secCheck.retryAfter) res.set('Retry-After', String(secCheck.retryAfter));
+    return res.status(secCheck.status || 429).json({ error: secCheck.error });
+  }
+
+  if (secCheck.backoffDelay > 0) {
+    await new Promise(r => setTimeout(r, secCheck.backoffDelay));
+  }
 
   if (cleanCode.length !== 8) {
     return res.status(400).json({ error: 'O código deve conter exatamente 8 dígitos numéricos.' });
@@ -1447,16 +1570,19 @@ app.post('/api/auth/verify-register', (req, res) => {
   `).get(cleanEmail);
 
   if (!record || new Date(record.expires_at).getTime() < Date.now()) {
+    recordSecurityAttempt(req, `register:${cleanEmail}`, 'verify_register', 0, secCheck.riskScore);
     return res.status(400).json({ error: 'Código de verificação expirado ou inválido. Solicite um novo código.' });
   }
 
   if (record.attempts >= 5) {
     db.prepare('DELETE FROM verification_codes WHERE id = ?').run(record.id);
+    recordSecurityAttempt(req, `register:${cleanEmail}`, 'verify_register', 0, 50);
     return res.status(400).json({ error: 'Limite de tentativas excedido. Solicite um novo código.' });
   }
 
   if (record.code !== cleanCode) {
     db.prepare('UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?').run(record.id);
+    recordSecurityAttempt(req, `register:${cleanEmail}`, 'verify_register', 0, secCheck.riskScore);
     return res.status(400).json({ error: 'Código incorreto. Verifique os 8 dígitos informados no seu e-mail.' });
   }
 
@@ -1475,15 +1601,16 @@ app.post('/api/auth/verify-register', (req, res) => {
   }
 
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-
   const nowIso = new Date().toISOString();
+  recordSecurityAttempt(req, `register:${cleanEmail}`, 'verify_register', 1, 0);
+
   if (userCount === 0) {
     const info = db.prepare(`
       INSERT INTO users (name, email, password_hash, role, status, created_at)
       VALUES (?, ?, ?, 'owner', 'approved', ?)
     `).run(payload.name, cleanEmail, payload.passwordHash, nowIso);
 
-    const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'owner', token_version: 1 }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'owner', token_version: 1 }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({
       success: true,
       message: 'Conta de Administrador criada e verificada com sucesso!',
@@ -1507,7 +1634,7 @@ app.post('/api/auth/verify-register', (req, res) => {
       message: 'Cadastro confirmado! Aguarde a aprovação do Administrador para acessar a plataforma.'
     });
   } else {
-    const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'member', token_version: 1 }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'member', token_version: 1 }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({
       success: true,
       pendingApproval: false,
@@ -1522,8 +1649,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Informe o e-mail cadastrado.' });
 
   const cleanEmail = String(email).trim().toLowerCase();
+  const secCheck = calculateSecurityRiskAndRateLimit(req, `forgot:${cleanEmail}`, 'forgot_password');
+  if (!secCheck.allowed) {
+    if (secCheck.retryAfter) res.set('Retry-After', String(secCheck.retryAfter));
+    return res.status(secCheck.status || 429).json({ error: secCheck.error });
+  }
+
   const user = db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(cleanEmail);
   if (!user) {
+    recordSecurityAttempt(req, `forgot:${cleanEmail}`, 'forgot_password', 0, 15);
     return res.status(404).json({ error: 'Nenhuma conta encontrada com este e-mail.' });
   }
 
@@ -1556,13 +1690,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     VALUES (?, ?, 'reset_password', 0, ?)
   `).run(cleanEmail, code, expiresAt);
 
+  recordSecurityAttempt(req, `forgot:${cleanEmail}`, 'forgot_password', 1, 0);
+
   res.json({
     success: true,
     message: 'Código de 8 dígitos enviado com sucesso para o seu e-mail.'
   });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', async (req, res) => {
   const { email, code, newPassword } = req.body || {};
   if (!email || !code || !newPassword) {
     return res.status(400).json({ error: 'Informe e-mail, o código de 8 dígitos e a nova senha.' });
@@ -1571,6 +1707,16 @@ app.post('/api/auth/reset-password', (req, res) => {
   const cleanEmail = String(email).trim().toLowerCase();
   const cleanCode = String(code).trim().replace(/\D/g, '');
   const cleanPassword = String(newPassword);
+
+  const secCheck = calculateSecurityRiskAndRateLimit(req, `reset:${cleanEmail}`, 'reset_password');
+  if (!secCheck.allowed) {
+    if (secCheck.retryAfter) res.set('Retry-After', String(secCheck.retryAfter));
+    return res.status(secCheck.status || 429).json({ error: secCheck.error });
+  }
+
+  if (secCheck.backoffDelay > 0) {
+    await new Promise(r => setTimeout(r, secCheck.backoffDelay));
+  }
 
   if (cleanCode.length !== 8) {
     return res.status(400).json({ error: 'O código deve conter exatamente 8 dígitos numéricos.' });
@@ -1586,27 +1732,32 @@ app.post('/api/auth/reset-password', (req, res) => {
   `).get(cleanEmail);
 
   if (!record || new Date(record.expires_at).getTime() < Date.now()) {
+    recordSecurityAttempt(req, `reset:${cleanEmail}`, 'reset_password', 0, secCheck.riskScore);
     return res.status(400).json({ error: 'Código de recuperação expirado ou inválido. Solicite novamente.' });
   }
 
   if (record.attempts >= 5) {
     db.prepare('DELETE FROM verification_codes WHERE id = ?').run(record.id);
+    recordSecurityAttempt(req, `reset:${cleanEmail}`, 'reset_password', 0, 50);
     return res.status(400).json({ error: 'Limite de tentativas excedido. Solicite um novo código.' });
   }
 
   if (record.code !== cleanCode) {
     db.prepare('UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?').run(record.id);
+    recordSecurityAttempt(req, `reset:${cleanEmail}`, 'reset_password', 0, secCheck.riskScore);
     return res.status(400).json({ error: 'Código incorreto. Verifique os 8 dígitos recebidos por e-mail.' });
   }
 
-  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+  const user = db.prepare('SELECT id, token_version FROM users WHERE email = ?').get(cleanEmail);
   if (!user) {
     return res.status(404).json({ error: 'Usuário não encontrado.' });
   }
 
+  const newVersion = (user.token_version || 1) + 1;
   const passwordHash = bcrypt.hashSync(cleanPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(passwordHash, cleanEmail);
+  db.prepare('UPDATE users SET password_hash = ?, token_version = ? WHERE email = ?').run(passwordHash, newVersion, cleanEmail);
   db.prepare('DELETE FROM verification_codes WHERE id = ?').run(record.id);
+  recordSecurityAttempt(req, `reset:${cleanEmail}`, 'reset_password', 1, 0);
 
   res.json({
     success: true,
@@ -1674,13 +1825,24 @@ app.post('/api/auth/resend-code', async (req, res) => {
   });
 });
 
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Informe e-mail e senha.' });
 
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = String(email).trim().toLowerCase();
+  const secCheck = calculateSecurityRiskAndRateLimit(req, `account:${cleanEmail}`, 'login');
+  if (!secCheck.allowed) {
+    if (secCheck.retryAfter) res.set('Retry-After', String(secCheck.retryAfter));
+    return res.status(secCheck.status || 429).json({ error: secCheck.error });
+  }
+
+  if (secCheck.backoffDelay > 0) {
+    await new Promise(r => setTimeout(r, secCheck.backoffDelay));
+  }
+
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    recordSecurityAttempt(req, `account:${cleanEmail}`, 'login', 0, secCheck.riskScore);
     return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
   }
 
@@ -1690,6 +1852,8 @@ app.post('/api/auth/login', (req, res) => {
   if (user.status === 'blocked') {
     return res.status(403).json({ error: 'Sua conta foi desativada pelo Administrador.' });
   }
+
+  recordSecurityAttempt(req, `account:${cleanEmail}`, 'login', 1, 0);
 
   if (user.two_factor_enabled) {
     const tempToken = jwt.sign({ id: user.id, isTemp2FA: true }, JWT_SECRET, { expiresIn: '10m' });
@@ -1713,7 +1877,7 @@ app.post('/api/auth/login', (req, res) => {
     }
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '7d' });
   res.json({
     success: true,
     token,
@@ -1851,7 +2015,7 @@ app.post('/api/auth/google', async (req, res) => {
     }
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '7d' });
   res.json({
     success: true,
     token,
@@ -1873,10 +2037,21 @@ app.post('/api/auth/google', async (req, res) => {
   });
 });
 
-app.post('/api/auth/verify-2fa', (req, res) => {
+app.post('/api/auth/verify-2fa', async (req, res) => {
   const { tempToken, code } = req.body || {};
   if (!tempToken || !code) {
     return res.status(400).json({ error: 'Parâmetros insuficientes.' });
+  }
+
+  const ip = getClientIp(req);
+  const secCheck = calculateSecurityRiskAndRateLimit(req, `2fa:${ip}`, 'verify_2fa');
+  if (!secCheck.allowed) {
+    if (secCheck.retryAfter) res.set('Retry-After', String(secCheck.retryAfter));
+    return res.status(secCheck.status || 429).json({ error: secCheck.error });
+  }
+
+  if (secCheck.backoffDelay > 0) {
+    await new Promise(r => setTimeout(r, secCheck.backoffDelay));
   }
 
   let decoded;
@@ -1897,10 +2072,13 @@ app.post('/api/auth/verify-2fa', (req, res) => {
 
   const isValid = verifyTOTP(code, user.two_factor_secret);
   if (!isValid) {
+    recordSecurityAttempt(req, `2fa:${user.id || ip}`, 'verify_2fa', 0, secCheck.riskScore);
     return res.status(400).json({ error: 'Código de 6 dígitos incorreto ou expirado.' });
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '30d' });
+  recordSecurityAttempt(req, `2fa:${user.id || ip}`, 'verify_2fa', 1, 0);
+
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '7d' });
 
   res.json({
     success: true,
@@ -1978,7 +2156,7 @@ app.post('/api/auth/confirm-member-2fa', (req, res) => {
     WHERE id = ?
   `).run(user.id);
 
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, token_version: user.token_version || 1 }, JWT_SECRET, { expiresIn: '7d' });
 
   res.json({
     success: true,
@@ -2002,6 +2180,43 @@ app.post('/api/auth/confirm-member-2fa', (req, res) => {
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ user: req.user });
+});
+
+app.get('/api/auth/check', (req, res) => {
+  const authHeader = req.headers.authorization;
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  }
+  if (!token) return res.json({ authenticated: false });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.isTemp2FA || decoded.isTempSetup2FA) {
+      return res.json({ authenticated: false });
+    }
+    const user = db.prepare('SELECT id, name, email, role, status, token_version, onboarding_completed FROM users WHERE id = ?').get(decoded.id);
+    if (!user || user.status !== 'approved') {
+      return res.json({ authenticated: false });
+    }
+    if (decoded.token_version !== undefined && user.token_version && decoded.token_version !== user.token_version) {
+      return res.json({ authenticated: false });
+    }
+    res.json({
+      authenticated: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        onboarding_completed: Boolean(user.onboarding_completed)
+      }
+    });
+  } catch (e) {
+    res.json({ authenticated: false });
+  }
 });
 
 app.get('/api/onboarding/status', authMiddleware, (req, res) => {

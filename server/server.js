@@ -58,9 +58,6 @@ if (NODE_ENV === 'production' && isInsecureSecret) {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cloudvturb_dev_secret_key_2026';
 
-const SERVER_STORAGE_LIMIT_BYTES = 30 * 1024 * 1024 * 1024;
-const MEMBER_STORAGE_LIMIT_BYTES = 3 * 1024 * 1024 * 1024;
-const MAX_STORAGE_BYTES = SERVER_STORAGE_LIMIT_BYTES;
 const APP_NAME = process.env.APP_NAME || 'CloudVTurb';
 const BASE_DOMAIN = (process.env.BASE_DOMAIN || '').toLowerCase();
 const PLAYER_DOMAIN = (process.env.PLAYER_DOMAIN || (BASE_DOMAIN ? `player.${BASE_DOMAIN}` : '')).toLowerCase();
@@ -464,6 +461,16 @@ const setSetting = (key, value) => {
 if (!getSetting('require_approval', null)) {
   setSetting('require_approval', '1');
 }
+
+const getServerStorageLimitBytes = () => {
+  const gb = parseFloat(getSetting('server_storage_limit_gb', process.env.SERVER_STORAGE_LIMIT_GB || '30'));
+  return (isNaN(gb) || gb <= 0 ? 30 : gb) * 1024 * 1024 * 1024;
+};
+
+const getMemberStorageLimitBytes = () => {
+  const gb = parseFloat(getSetting('member_storage_limit_gb', process.env.MEMBER_STORAGE_LIMIT_GB || '3'));
+  return (isNaN(gb) || gb <= 0 ? 3 : gb) * 1024 * 1024 * 1024;
+};
 
 const rawAllowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
@@ -1057,12 +1064,14 @@ function checkStorageQuotaPre(req, res, next) {
   const isOwner = req.user && req.user.role === 'owner';
   if (!isOwner) {
     const userUsed = getUserStorageBytes(req.user ? req.user.id : 0);
-    if (userUsed + incomingLength > MEMBER_STORAGE_LIMIT_BYTES) {
-      return res.status(400).json({ error: 'Cota individual de 3 GB atingida. Remova vídeos para liberar espaço.' });
+    const memberLimit = getMemberStorageLimitBytes();
+    if (userUsed + incomingLength > memberLimit) {
+      const memberLimitGb = (memberLimit / (1024 * 1024 * 1024)).toFixed(0);
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB atingida. Remova vídeos para liberar espaço.` });
     }
   }
   const currentUsed = getUsedStorageBytes();
-  if (currentUsed + incomingLength > SERVER_STORAGE_LIMIT_BYTES) {
+  if (currentUsed + incomingLength > getServerStorageLimitBytes()) {
     return res.status(400).json({ error: 'Capacidade do servidor temporariamente esgotada.' });
   }
   next();
@@ -2158,8 +2167,12 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
 
   if (isOwner) {
     const usedBytes = getTotalVideosStorageBytes();
-    const totalBytes = SERVER_STORAGE_LIMIT_BYTES;
+    const totalBytes = getServerStorageLimitBytes();
     const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+    const serverLimitGb = Math.round(totalBytes / (1024 * 1024 * 1024));
+    const memberLimitBytes = getMemberStorageLimitBytes();
+    const memberLimitGb = Math.round(memberLimitBytes / (1024 * 1024 * 1024));
+
     return res.json({
       isOwner: true,
       requireApproval,
@@ -2173,17 +2186,26 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
         usedMB: (usedBytes / (1024 * 1024)).toFixed(1),
         usedGB: (usedBytes / (1024 * 1024 * 1024)).toFixed(2),
         formattedUsage: formatStorage(usedBytes),
-        totalFormatted: '30 GB',
-        totalGB: '30',
+        totalFormatted: `${serverLimitGb} GB`,
+        totalGB: String(serverLimitGb),
         usagePercent: percent < 0.1 && usedBytes > 0 ? '0.1' : percent.toFixed(1),
-        isIndividual: false
+        isIndividual: false,
+        serverLimitGb,
+        memberLimitGb,
+        storageDriver: getSetting('storage_driver', process.env.STORAGE_DRIVER || 'local'),
+        s3Endpoint: getSetting('s3_endpoint', process.env.S3_ENDPOINT || ''),
+        s3Bucket: getSetting('s3_bucket', process.env.S3_BUCKET || ''),
+        s3AccessKey: getSetting('s3_access_key', process.env.S3_ACCESS_KEY || '') ? '••••••••' : '',
+        s3PublicUrl: getSetting('s3_public_url', process.env.S3_PUBLIC_URL || '')
       }
     });
   }
 
   const usedBytes = getUserStorageBytes(req.user.id);
-  const totalBytes = MEMBER_STORAGE_LIMIT_BYTES;
+  const totalBytes = getMemberStorageLimitBytes();
   const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+  const memberLimitGb = Math.round(totalBytes / (1024 * 1024 * 1024));
+
   res.json({
     isOwner: false,
     appName: APP_NAME,
@@ -2196,8 +2218,8 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
       usedMB: (usedBytes / (1024 * 1024)).toFixed(1),
       usedGB: (usedBytes / (1024 * 1024 * 1024)).toFixed(2),
       formattedUsage: formatStorage(usedBytes),
-      totalFormatted: '3 GB',
-      totalGB: '3',
+      totalFormatted: `${memberLimitGb} GB`,
+      totalGB: String(memberLimitGb),
       usagePercent: percent < 0.1 && usedBytes > 0 ? '0.1' : percent.toFixed(1),
       isIndividual: true
     }
@@ -2205,11 +2227,43 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
 });
 
 app.post('/api/admin/settings', authMiddleware, ownerMiddleware, (req, res) => {
-  const { requireApproval } = req.body;
+  const {
+    requireApproval,
+    serverLimitGb,
+    memberLimitGb,
+    storageDriver,
+    s3Endpoint,
+    s3Bucket,
+    s3AccessKey,
+    s3SecretKey,
+    s3PublicUrl
+  } = req.body;
+
   if (requireApproval !== undefined) {
     setSetting('require_approval', requireApproval ? '1' : '0');
   }
-  res.json({ success: true });
+  if (serverLimitGb !== undefined) {
+    const sGb = parseFloat(serverLimitGb);
+    if (!isNaN(sGb) && sGb > 0) setSetting('server_storage_limit_gb', String(sGb));
+  }
+  if (memberLimitGb !== undefined) {
+    const mGb = parseFloat(memberLimitGb);
+    if (!isNaN(mGb) && mGb > 0) setSetting('member_storage_limit_gb', String(mGb));
+  }
+  if (storageDriver !== undefined) {
+    setSetting('storage_driver', storageDriver === 's3_r2' ? 's3_r2' : 'local');
+  }
+  if (s3Endpoint !== undefined) setSetting('s3_endpoint', String(s3Endpoint).trim());
+  if (s3Bucket !== undefined) setSetting('s3_bucket', String(s3Bucket).trim());
+  if (s3AccessKey !== undefined && !String(s3AccessKey).includes('••••')) {
+    setSetting('s3_access_key', String(s3AccessKey).trim());
+  }
+  if (s3SecretKey !== undefined && String(s3SecretKey).trim()) {
+    setSetting('s3_secret_key', String(s3SecretKey).trim());
+  }
+  if (s3PublicUrl !== undefined) setSetting('s3_public_url', String(s3PublicUrl).trim());
+
+  res.json({ success: true, message: 'Configurações atualizadas com sucesso!' });
 });
 
 const avatarStorage = multer.diskStorage({
@@ -2957,7 +3011,7 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
     `).all(req.user.id);
   }
 
-  const totalLimitBytes = isOwner ? SERVER_STORAGE_LIMIT_BYTES : MEMBER_STORAGE_LIMIT_BYTES;
+  const totalLimitBytes = isOwner ? getServerStorageLimitBytes() : getMemberStorageLimitBytes();
   const usedBytes = isOwner ? getTotalVideosStorageBytes() : getUserStorageBytes(req.user.id);
   const freeBytes = Math.max(0, totalLimitBytes - usedBytes);
   const percent = totalLimitBytes > 0 ? (usedBytes / totalLimitBytes) * 100 : 0;
@@ -4192,7 +4246,7 @@ app.get('/api/analytics/overview', authMiddleware, (req, res) => {
 
   const isOwner = req.user.role === 'owner';
   const usedBytes = isOwner ? getTotalVideosStorageBytes() : getUserStorageBytes(req.user.id);
-  const totalBytes = isOwner ? SERVER_STORAGE_LIMIT_BYTES : MEMBER_STORAGE_LIMIT_BYTES;
+  const totalBytes = isOwner ? getServerStorageLimitBytes() : getMemberStorageLimitBytes();
 
   res.json({
     totalViews,
@@ -4964,22 +5018,25 @@ app.post('/api/upload', authMiddleware, checkStorageQuotaPre, (req, res) => {
     const userUsed = getUserStorageBytes(req.user.id);
     const initialSize = fs.statSync(originalPath).size;
 
-    if (!isOwner && (userUsed + initialSize > MEMBER_STORAGE_LIMIT_BYTES)) {
+    const memberLimit = getMemberStorageLimitBytes();
+    const memberLimitGb = Math.round(memberLimit / (1024 * 1024 * 1024));
+
+    if (!isOwner && (userUsed + initialSize > memberLimit)) {
       try { fs.unlinkSync(originalPath); } catch (e) {}
-      return res.status(400).json({ error: 'Cota individual de 3 GB atingida. Remova vídeos para liberar espaço.' });
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB atingida. Remova vídeos para liberar espaço.` });
     }
 
     const currentUsed = getUsedStorageBytes();
-    if (currentUsed > SERVER_STORAGE_LIMIT_BYTES) {
+    if (currentUsed > getServerStorageLimitBytes()) {
       try { fs.unlinkSync(originalPath); } catch (e) {}
       return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
     }
 
     const finalStat = fs.statSync(originalPath);
 
-    if (!isOwner && (userUsed + finalStat.size > MEMBER_STORAGE_LIMIT_BYTES)) {
+    if (!isOwner && (userUsed + finalStat.size > memberLimit)) {
       try { fs.unlinkSync(originalPath); } catch (e) {}
-      return res.status(400).json({ error: 'Cota individual de 3 GB excedida para este vídeo.' });
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB excedida para este vídeo.` });
     }
 
     const host = req.get('host') || '';
@@ -5037,12 +5094,15 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
     }
     const declaredSize = parseInt(meta.size || '0', 10);
 
-    if (!isOwner && declaredSize > 0 && (userUsed + declaredSize > MEMBER_STORAGE_LIMIT_BYTES)) {
-      return res.status(400).json({ error: 'Cota individual de 3 GB atingida. Remova vídeos para liberar espaço.' });
+    const memberLimit = getMemberStorageLimitBytes();
+    const memberLimitGb = Math.round(memberLimit / (1024 * 1024 * 1024));
+
+    if (!isOwner && declaredSize > 0 && (userUsed + declaredSize > memberLimit)) {
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB atingida. Remova vídeos para liberar espaço.` });
     }
 
     const currentUsed = getUsedStorageBytes();
-    if (declaredSize > 0 && (currentUsed + declaredSize > SERVER_STORAGE_LIMIT_BYTES)) {
+    if (declaredSize > 0 && (currentUsed + declaredSize > getServerStorageLimitBytes())) {
       return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
     }
 
@@ -5063,9 +5123,9 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
 
     const finalStat = fs.statSync(targetPath);
 
-    if (!isOwner && (userUsed + finalStat.size > MEMBER_STORAGE_LIMIT_BYTES)) {
+    if (!isOwner && (userUsed + finalStat.size > memberLimit)) {
       try { fs.unlinkSync(targetPath); } catch (e) {}
-      return res.status(400).json({ error: 'Cota individual de 3 GB excedida para este vídeo.' });
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB excedida para este vídeo.` });
     }
 
     const host = req.get('host') || '';

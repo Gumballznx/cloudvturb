@@ -6740,6 +6740,10 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"></path><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06l3.19 5.86"></path><circle cx="18" cy="18" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="12" cy="5" r="2.5"></circle></svg>
                 Webhooks
               </button>
+              <button class="settings-tab-btn" id="btnSettingsStorage" onclick="switchSettingsTab('storage')" style="display: none;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                Armazenamento
+              </button>
             </div>
           </div>
 
@@ -7064,8 +7068,96 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               </div>
             </div>
           </div>
-        </div>
-      </section>
+
+          <div id="settingsPaneStorage" style="display: none;">
+            <div class="card-panel" style="margin-bottom: 24px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Capacidade & Cotas</span>
+              <h3 style="font-size: 18px; font-weight: 700; color: var(--text-main); margin: 4px 0 16px;">Limites de Armazenamento</h3>
+              <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+                Configure a capacidade máxima do servidor e a cota concedida aos membros. O sistema opera com sobrealocação inteligente (não trava cadastros, bloqueando novos uploads apenas se o teto físico for atingido).
+              </p>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-bottom: 24px;">
+                <div class="form-row">
+                  <label class="form-label" for="cfgServerLimitGb">Limite Total do Servidor (GB)</label>
+                  <input type="number" min="1" max="100000" step="1" id="cfgServerLimitGb" class="form-input-text" placeholder="30" style="padding: 10px 14px;">
+                  <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">Espaço total disponível somando todos os vídeos do servidor.</span>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="cfgMemberLimitGb">Cota Padrão por Membro (GB)</label>
+                  <input type="number" min="1" max="10000" step="1" id="cfgMemberLimitGb" class="form-input-text" placeholder="3" style="padding: 10px 14px;">
+                  <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">Limite máximo de vídeos que cada usuário comum pode hospedar.</span>
+                </div>
+              </div>
+
+              <div id="storageOverviewBox" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">Uso Atual do Armazenamento</span>
+                  <span id="storageOverviewLabel" style="font-size: 13px; font-weight: 700; color: var(--color-primary);">0 GB / 30 GB</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: var(--border-subtle); border-radius: 9999px; overflow: hidden;">
+                  <div id="storageOverviewBar" style="width: 0%; height: 100%; background: var(--color-primary); border-radius: 9999px; transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-panel" style="margin-bottom: 24px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Infraestrutura</span>
+              <h3 style="font-size: 18px; font-weight: 700; color: var(--text-main); margin: 4px 0 16px;">Provedor de Armazenamento</h3>
+              <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+                Escolha onde os vídeos originais e otimizados das VSLs serão armazenados.
+              </p>
+
+              <div class="form-row" style="margin-bottom: 20px;">
+                <label class="form-label">Tipo de Driver</label>
+                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-main);">
+                    <input type="radio" name="storageDriverRadio" value="local" checked onchange="toggleStorageDriverFields()">
+                    Disco Local da VPS (Padrão)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-main);">
+                    <input type="radio" name="storageDriverRadio" value="s3_r2" onchange="toggleStorageDriverFields()">
+                    Cloudflare R2 / AWS S3 (Bucket Nuvem)
+                  </label>
+                </div>
+              </div>
+
+              <div id="s3ConfigContainer" style="display: none; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 20px; margin-bottom: 20px;">
+                <div style="font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                  Credenciais do Bucket S3 / Cloudflare R2
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+                  <div class="form-row">
+                    <label class="form-label" for="cfgS3Endpoint">S3 Endpoint URL</label>
+                    <input type="text" id="cfgS3Endpoint" class="form-input-text" placeholder="https://<account_id>.r2.cloudflarestorage.com">
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="cfgS3Bucket">Nome do Bucket</label>
+                    <input type="text" id="cfgS3Bucket" class="form-input-text" placeholder="cloudvturb-videos">
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="cfgS3AccessKey">Access Key ID</label>
+                    <input type="text" id="cfgS3AccessKey" class="form-input-text" placeholder="Chave de Acesso">
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="cfgS3SecretKey">Secret Access Key</label>
+                    <input type="password" id="cfgS3SecretKey" class="form-input-text" placeholder="Chave Secreta">
+                  </div>
+                  <div class="form-row" style="grid-column: 1 / -1;">
+                    <label class="form-label" for="cfgS3PublicUrl">URL Pública da CDN / Domínio Personalizado</label>
+                    <input type="text" id="cfgS3PublicUrl" class="form-input-text" placeholder="https://cdn.seudominio.com ou https://pub-xxxx.r2.dev">
+                    <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">URL pública configurada no bucket para entrega direta com taxa zero de saída.</span>
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" class="btn-primary-action" id="btnSaveStorageSettings" onclick="saveStorageSettings()" style="display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                <span>Salvar Configurações</span>
+              </button>
+            </div>
+          </div>
 
       <section class="tab-view" id="viewSecurity">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
@@ -9036,9 +9128,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (currentUser.role === 'owner') {
         document.getElementById('navUsers').style.display = 'flex';
         document.getElementById('ownerCategoryLabel').style.display = 'block';
+        const btnStorage = document.getElementById('btnSettingsStorage');
+        if (btnStorage) btnStorage.style.display = 'inline-flex';
       } else {
         document.getElementById('navUsers').style.display = 'none';
         document.getElementById('ownerCategoryLabel').style.display = 'none';
+        const btnStorage = document.getElementById('btnSettingsStorage');
+        if (btnStorage) btnStorage.style.display = 'none';
       }
     }
 
@@ -16383,11 +16479,88 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       account: '/settings/profile',
       members: '/settings/members',
       api: '/settings/analytics-api',
-      webhooks: '/settings/webhooks'
+      webhooks: '/settings/webhooks',
+      storage: '/settings/storage'
     };
 
+    function toggleStorageDriverFields() {
+      const selected = document.querySelector('input[name="storageDriverRadio"]:checked')?.value;
+      const c = document.getElementById('s3ConfigContainer');
+      if (c) c.style.display = selected === 's3_r2' ? 'block' : 'none';
+    }
+
+    async function loadStorageSettings() {
+      try {
+        const data = await api('/api/admin/settings');
+        if (!data || !data.storage) return;
+        const st = data.storage;
+        const srvInput = document.getElementById('cfgServerLimitGb');
+        const memInput = document.getElementById('cfgMemberLimitGb');
+        if (srvInput) srvInput.value = st.serverLimitGb || 30;
+        if (memInput) memInput.value = st.memberLimitGb || 3;
+
+        const driver = st.storageDriver || 'local';
+        const radio = document.querySelector(`input[name="storageDriverRadio"][value="${driver}"]`);
+        if (radio) radio.checked = true;
+        toggleStorageDriverFields();
+
+        const s3Ep = document.getElementById('cfgS3Endpoint');
+        const s3Bk = document.getElementById('cfgS3Bucket');
+        const s3Ak = document.getElementById('cfgS3AccessKey');
+        const s3Pub = document.getElementById('cfgS3PublicUrl');
+        if (s3Ep) s3Ep.value = st.s3Endpoint || '';
+        if (s3Bk) s3Bk.value = st.s3Bucket || '';
+        if (s3Ak) s3Ak.value = st.s3AccessKey || '';
+        if (s3Pub) s3Pub.value = st.s3PublicUrl || '';
+
+        const lbl = document.getElementById('storageOverviewLabel');
+        const bar = document.getElementById('storageOverviewBar');
+        if (lbl) lbl.textContent = `${st.formattedUsage} / ${st.totalFormatted} (${st.usagePercent}%)`;
+        if (bar) bar.style.width = `${Math.min(100, parseFloat(st.usagePercent) || 0)}%`;
+      } catch (e) {
+        showToast('Erro ao carregar armazenamento: ' + (e.message || e), true);
+      }
+    }
+
+    async function saveStorageSettings() {
+      const btn = document.getElementById('btnSaveStorageSettings');
+      setButtonLoading(btn, true, 'Salvando...');
+      try {
+        const serverLimitGb = parseFloat(document.getElementById('cfgServerLimitGb')?.value || '30');
+        const memberLimitGb = parseFloat(document.getElementById('cfgMemberLimitGb')?.value || '3');
+        const storageDriver = document.querySelector('input[name="storageDriverRadio"]:checked')?.value || 'local';
+        const s3Endpoint = document.getElementById('cfgS3Endpoint')?.value || '';
+        const s3Bucket = document.getElementById('cfgS3Bucket')?.value || '';
+        const s3AccessKey = document.getElementById('cfgS3AccessKey')?.value || '';
+        const s3SecretKey = document.getElementById('cfgS3SecretKey')?.value || '';
+        const s3PublicUrl = document.getElementById('cfgS3PublicUrl')?.value || '';
+
+        await api('/api/admin/settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            serverLimitGb,
+            memberLimitGb,
+            storageDriver,
+            s3Endpoint,
+            s3Bucket,
+            s3AccessKey,
+            s3SecretKey,
+            s3PublicUrl
+          })
+        });
+
+        showToast('Configurações de armazenamento salvas com sucesso!');
+        await loadStorageSettings();
+        if (typeof updateStorageBar === 'function') updateStorageBar();
+      } catch (e) {
+        showToast('Erro ao salvar: ' + (e.message || e), true);
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    }
+
     function switchSettingsTab(tab, updateUrl = true) {
-      const tabs = ['account', 'members', 'api', 'webhooks'];
+      const tabs = ['account', 'members', 'api', 'webhooks', 'storage'];
       tabs.forEach(t => {
         const btn = document.getElementById(`btnSettings${t.charAt(0).toUpperCase() + t.slice(1)}`);
         const pane = document.getElementById(`settingsPane${t.charAt(0).toUpperCase() + t.slice(1)}`);
@@ -16413,6 +16586,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         loadApiKeys();
       } else if (tab === 'webhooks') {
         loadWebhooks();
+      } else if (tab === 'storage') {
+        loadStorageSettings();
       }
     }
 

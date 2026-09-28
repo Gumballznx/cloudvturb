@@ -10399,20 +10399,29 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
-    async function unblockVideoModeration(videoId, videoTitle) {
-      if (!confirm(`Deseja desbloquear o vídeo "${videoTitle}"? Ele voltará a ficar disponível para reprodução.`)) {
-        return;
-      }
-      try {
-        const res = await api(`/api/videos/${encodeURIComponent(videoId)}/moderate`, {
-          method: 'POST',
-          body: { action: 'unblock' }
-        });
-        showToast(res.message || 'Vídeo desbloqueado com sucesso!', false);
-        await loadStorageDetails();
-      } catch (err) {
-        showToast(err.message || 'Erro ao desbloquear vídeo.', true);
-      }
+    function unblockVideoModeration(videoId, videoTitle) {
+      showConfirmDialog({
+        title: 'Desbloquear Vídeo',
+        message: `Deseja desbloquear o vídeo "${videoTitle}"? Ele voltará a ficar disponível para reprodução.`,
+        confirmText: 'Desbloquear Vídeo',
+        isDanger: false,
+        onConfirm: async (btn) => {
+          setButtonLoading(btn, true, 'Desbloqueando...');
+          try {
+            const res = await api(`/api/videos/${encodeURIComponent(videoId)}/moderate`, {
+              method: 'POST',
+              body: { action: 'unblock' }
+            });
+            closeConfirmModal();
+            showToast(res.message || 'Vídeo desbloqueado com sucesso!', false);
+            await loadStorageDetails();
+          } catch (err) {
+            showToast(err.message || 'Erro ao desbloquear vídeo.', true);
+          } finally {
+            setButtonLoading(btn, false);
+          }
+        }
+      });
     }
 
     let activeStorageVideoId = null;
@@ -11374,6 +11383,12 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           body: JSON.stringify({ title: newTitle })
         });
         closeRenameVideoModal();
+        if (typeof currentEditingVideoId !== 'undefined' && currentEditingVideoId === renamingVideoId) {
+          const tEl = document.getElementById('vturbEditorTitle');
+          if (tEl) tEl.textContent = newTitle;
+          const inp = document.getElementById('edTitle');
+          if (inp) inp.value = newTitle;
+        }
         await loadAllDashboardData();
         showToast('VSL renomeada com sucesso!');
       } catch (err) {
@@ -15066,18 +15081,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function promptRenameVideo() {
       if (!currentEditingVideoId) return;
-      const v = videos.find(x => x.id === currentEditingVideoId);
-      if (!v) return;
-      const newTitle = prompt('Novo título para esta VSL:', v.title || '');
-      if (newTitle !== null && newTitle.trim()) {
-        const val = newTitle.trim();
-        v.title = val;
-        const tEl = document.getElementById('vturbEditorTitle');
-        if (tEl) tEl.textContent = val;
-        const inp = document.getElementById('edTitle');
-        if (inp) inp.value = val;
-        saveCurrentVideoSettings();
-      }
+      openRenameVideoModal(currentEditingVideoId);
     }
 
     let loadSettingsSelectedVideoId = null;
@@ -16315,22 +16319,27 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       }
     }
 
-    async function approveAllPendingUsers() {
-      const btn = document.getElementById('btnApproveAllUsers');
+    function approveAllPendingUsers() {
       const count = document.getElementById('btnApproveAllCount')?.textContent || '';
-      if (!confirm(`Deseja aprovar todos os ${count} usuários pendentes de uma só vez? Eles receberão o e-mail de confirmação imediatamente.`)) {
-        return;
-      }
-      setButtonLoading(btn, true, 'Aprovando...');
-      try {
-        const res = await api('/api/admin/users/approve-all', { method: 'POST' });
-        showToast(res.message || 'Todos os usuários pendentes foram aprovados com sucesso!');
-        await loadUsersTable();
-      } catch (err) {
-        showToast('Erro ao aprovar usuários: ' + (err.message || err), true);
-      } finally {
-        setButtonLoading(btn, false);
-      }
+      showConfirmDialog({
+        title: 'Aprovar Todos os Usuários',
+        message: `Deseja aprovar todos os ${count} usuários pendentes de uma só vez? Eles receberão o e-mail de confirmação imediatamente.`,
+        confirmText: 'Sim, Aprovar Todos',
+        isDanger: false,
+        onConfirm: async (btn) => {
+          setButtonLoading(btn, true, 'Aprovando...');
+          try {
+            const res = await api('/api/admin/users/approve-all', { method: 'POST' });
+            closeConfirmModal();
+            showToast(res.message || 'Todos os usuários pendentes foram aprovados com sucesso!');
+            await loadUsersTable();
+          } catch (err) {
+            showToast('Erro ao aprovar usuários: ' + (err.message || err), true);
+          } finally {
+            setButtonLoading(btn, false);
+          }
+        }
+      });
     }
 
     async function loadUsersTable() {

@@ -467,7 +467,7 @@
       </a>
 
       <div class="header-nav">
-        <a href="https://docs.cloudvturb.online" target="_blank" rel="noopener noreferrer" class="btn-github-nav" title="Documentação Oficial" aria-label="Documentação Oficial">
+        <a href="#" data-docs-link="true" target="_blank" rel="noopener noreferrer" class="btn-github-nav" title="Documentação Oficial" aria-label="Documentação Oficial">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
@@ -590,7 +590,7 @@
     <div style="display: flex; justify-content: center; align-items: center; gap: 16px; flex-wrap: wrap;">
       <span>© 2026 CloudVTurb. Todos os direitos reservados.</span>
       <span>•</span>
-      <a href="https://docs.cloudvturb.online" target="_blank" rel="noopener noreferrer" style="color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+      <a href="#" data-docs-link="true" target="_blank" rel="noopener noreferrer" style="color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
@@ -644,6 +644,18 @@
       try { localStorage.setItem('cloudvturb_landing_github_dismissed', '1'); } catch (e) {}
     }
     initGithubToast();
+    function initDocsLinks() {
+      try {
+        const host = window.location.host;
+        const proto = window.location.protocol;
+        const cleanHost = host.replace(/^(dash|player|api|landing)\./i, '');
+        const docsUrl = `${proto}//docs.${cleanHost}`;
+        document.querySelectorAll('[data-docs-link]').forEach(el => {
+          el.href = docsUrl;
+        });
+      } catch (e) {}
+    }
+    initDocsLinks();
   </script>
 
 </body>

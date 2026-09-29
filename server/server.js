@@ -1115,7 +1115,7 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   const info = labels[action];
   if (!info) return;
 
-  const loginUrl = `https://${DASH_DOMAIN || 'dash.cloudvturb.online'}/login`;
+  const loginUrl = DASH_DOMAIN ? `https://${DASH_DOMAIN}/login` : '/login';
   const actionButton = action === 'approve' ? `<div style="text-align:center;margin:28px 0 24px 0;"><a href="${loginUrl}" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;">Acessar Plataforma &rarr;</a></div>` : '';
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${info.title}</title></head>
@@ -1201,8 +1201,8 @@ app.get('/api/config', (req, res) => {
   const host = req.get('host') || '';
   const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
   const playerDomain = (isProd && PLAYER_DOMAIN) ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
-  const dashDomain = (isProd && DASH_DOMAIN) ? `https://${DASH_DOMAIN}` : `${req.protocol}://${host}`;
-  const docsDomain = (isProd && DOCS_DOMAIN) ? `https://${DOCS_DOMAIN}` : `${req.protocol}://docs.${host}`;
+  const cleanHost = host.replace(/^(dash|player|api)\./i, '');
+  const docsDomain = (isProd && DOCS_DOMAIN) ? `https://${DOCS_DOMAIN}` : (DOCS_DOMAIN ? `https://${DOCS_DOMAIN}` : `${req.protocol}://docs.${cleanHost}`);
   res.json({
     appName: APP_NAME,
     baseDomain: BASE_DOMAIN,

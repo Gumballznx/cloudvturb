@@ -467,7 +467,7 @@
 
   <header class="docs-header">
     <div class="header-left">
-      <a href="https://cloudvturb.online" class="brand-link">
+      <a href="/" class="brand-link" id="brandHomeLink">
         <img src="/favicon.svg" alt="CloudVTurb" width="28" height="28" style="vertical-align: middle;">
         <div><span>Cloud</span>VTurb</div>
       </a>
@@ -490,7 +490,7 @@
           <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
         </svg>
       </button>
-      <a href="https://dash.cloudvturb.online/login" class="header-cta-btn">Acessar Painel</a>
+      <a href="/login" class="header-cta-btn" id="headerDashLink">Acessar Painel</a>
     </div>
   </header>
 
@@ -680,12 +680,12 @@
             </li>
             <li>Na aba <strong>General</strong>, configure a porta do container para <code>4000</code>.</li>
             <li>Na aba <strong>Environment</strong>, adicione as variáveis de ambiente necessárias (veja a tabela na Seção 6).</li>
-            <li>Na aba <strong>Domains</strong>, configure os domínios:
+            <li>Na aba <strong>Domains</strong>, configure os domínios da sua aplicação:
               <ul>
-                <li><code>cloudvturb.online</code> (Porta 4000)</li>
-                <li><code>dash.cloudvturb.online</code> (Porta 4000)</li>
-                <li><code>player.cloudvturb.online</code> (Porta 4000)</li>
-                <li><code>docs.cloudvturb.online</code> (Porta 4000)</li>
+                <li><code>seudominio.com</code> (Porta 4000)</li>
+                <li><code>dash.seudominio.com</code> (Porta 4000)</li>
+                <li><code>player.seudominio.com</code> (Porta 4000)</li>
+                <li><code>docs.seudominio.com</code> (Porta 4000)</li>
               </ul>
             </li>
             <li>Clique em <strong>Deploy</strong>. O Dokploy fará o build da imagem Docker com Node 20 e FFmpeg automaticamente.</li>
@@ -854,25 +854,25 @@ docker compose up -d --build</code></pre>
                 <tr>
                   <td><code>BASE_DOMAIN</code></td>
                   <td>Sim</td>
-                  <td><code>cloudvturb.online</code></td>
+                  <td><code>seudominio.com</code></td>
                   <td>Domínio raiz da página de vendas / landing.</td>
                 </tr>
                 <tr>
                   <td><code>DASH_DOMAIN</code></td>
                   <td>Sim</td>
-                  <td><code>dash.cloudvturb.online</code></td>
+                  <td><code>dash.seudominio.com</code></td>
                   <td>Subdomínio de acesso ao painel de controle e login.</td>
                 </tr>
                 <tr>
                   <td><code>PLAYER_DOMAIN</code></td>
                   <td>Sim</td>
-                  <td><code>player.cloudvturb.online</code></td>
+                  <td><code>player.seudominio.com</code></td>
                   <td>Subdomínio isolado onde os players são executados.</td>
                 </tr>
                 <tr>
                   <td><code>DOCS_DOMAIN</code></td>
                   <td>Sim</td>
-                  <td><code>docs.cloudvturb.online</code></td>
+                  <td><code>docs.seudominio.com</code></td>
                   <td>Subdomínio exclusivo onde a documentação é servida.</td>
                 </tr>
                 <tr>
@@ -922,7 +922,7 @@ docker compose up -d --build</code></pre>
             <li>Clique em <strong>Create Bucket</strong> e atribua um nome (ex: <code>meu-vturb-vsls</code>).</li>
             <li>No menu lateral direito do R2, clique em <strong>Manage R2 API Tokens</strong> e crie um token com permissão <strong>Object Read & Write</strong>.</li>
             <li>Anote o <strong>Access Key ID</strong> e o <strong>Secret Access Key</strong>.</li>
-            <li>Acesse a aba <strong>Settings</strong> do bucket criado e ative <strong>Public Access</strong> ou adicione um subdomínio próprio (ex: <code>cdn.cloudvturb.online</code>).</li>
+            <li>Acesse a aba <strong>Settings</strong> do bucket criado e ative <strong>Public Access</strong> ou adicione um subdomínio próprio (ex: <code>cdn.seudominio.com</code>).</li>
             <li>No painel do CloudVTurb, acesse <strong>Configurações &rarr; Armazenamento</strong>, selecione <strong>Cloudflare R2 / S3</strong> e salve os dados.</li>
           </ol>
         </section>
@@ -940,9 +940,9 @@ docker compose up -d --build</code></pre>
             <li>Crie um novo projeto ou selecione um existente.</li>
             <li>Acesse <strong>APIs e Serviços &rarr; Credenciais</strong> e clique em <strong>Criar Credenciais &rarr; ID do cliente OAuth</strong>.</li>
             <li>Tipo de aplicativo: <strong>Aplicativo da Web</strong>.</li>
-            <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione:
-              <br><code>https://dash.cloudvturb.online</code>
-              <br><code>https://cloudvturb.online</code>
+            <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione os seus domínios:
+              <br><code>https://dash.seudominio.com</code>
+              <br><code>https://seudominio.com</code>
             </li>
             <li>Copie o <strong>Client ID</strong> gerado e adicione ao seu arquivo <code>.env</code> na variável <code>GOOGLE_CLIENT_ID</code>.</li>
           </ol>
@@ -964,12 +964,12 @@ docker compose up -d --build</code></pre>
               <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
             </div>
             <pre><code>&lt;!-- Pre-carregamento rapido do player --&gt;
-&lt;link rel="preconnect" href="https://player.cloudvturb.online"&gt;
-&lt;link rel="dns-prefetch" href="https://player.cloudvturb.online"&gt;
+&lt;link rel="preconnect" href="https://player.seudominio.com"&gt;
+&lt;link rel="dns-prefetch" href="https://player.seudominio.com"&gt;
 
 &lt;!-- Container responsivo com proporcao 16:9 --&gt;
 &lt;div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:12px;"&gt;
-  &lt;iframe src="https://player.cloudvturb.online/players/SEU_VIDEO_ID"
+  &lt;iframe src="https://player.seudominio.com/players/SEU_VIDEO_ID"
           style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
           allow="autoplay; fullscreen"
           allowfullscreen&gt;&lt;/iframe&gt;
@@ -1072,6 +1072,18 @@ docker compose up -d --build</code></pre>
     }, { rootMargin: '-20% 0px -70% 0px' });
 
     document.querySelectorAll('.doc-section').forEach(sec => observer.observe(sec));
+
+    try {
+      const h = window.location.host;
+      const proto = window.location.protocol;
+      if (h.includes('.')) {
+        const rootDomain = h.replace(/^docs\./i, '');
+        const dashA = document.getElementById('headerDashLink');
+        const homeA = document.getElementById('brandHomeLink');
+        if (dashA) dashA.href = `${proto}//dash.${rootDomain}/login`;
+        if (homeA) homeA.href = `${proto}//${rootDomain}`;
+      }
+    } catch (e) {}
   </script>
 </body>
 </html>

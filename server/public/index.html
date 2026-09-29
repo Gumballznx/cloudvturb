@@ -5330,7 +5330,7 @@
         </div>
 
         <div class="nav-category">Comunidade</div>
-        <a href="https://docs.cloudvturb.online" target="_blank" rel="noopener noreferrer" class="nav-item" style="text-decoration: none;">
+        <a href="#" data-docs-link="true" target="_blank" rel="noopener noreferrer" class="nav-item" style="text-decoration: none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
           <span>Documentação</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
@@ -6097,7 +6097,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               </div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;">
-              <a href="https://docs.cloudvturb.online" target="_blank" rel="noopener noreferrer" class="btn-clean-secondary" style="padding: 8px 14px; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+              <a href="#" data-docs-link="true" target="_blank" rel="noopener noreferrer" class="btn-clean-secondary" style="padding: 8px 14px; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                 </svg>
@@ -8833,6 +8833,21 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       return d ? d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
     }
 
+    function updateDocsLinks() {
+      try {
+        let docsUrl = (typeof appConfig !== 'undefined' && appConfig && appConfig.docsDomain) ? appConfig.docsDomain : '';
+        if (!docsUrl) {
+          const host = window.location.host;
+          const proto = window.location.protocol;
+          const cleanHost = host.replace(/^(dash|player|api)\./i, '');
+          docsUrl = `${proto}//docs.${cleanHost}`;
+        }
+        document.querySelectorAll('[data-docs-link]').forEach(el => {
+          el.href = docsUrl;
+        });
+      } catch (e) {}
+    }
+
     function toggleSidebar(open) {
       const sb = document.getElementById('sidebar');
       const bd = document.getElementById('sidebarBackdrop');
@@ -8968,6 +8983,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           topVideos = JSON.parse(cachedTop);
         }
       } catch (e) {}
+      updateDocsLinks();
     }
 
     async function initSession() {
@@ -8993,7 +9009,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
               if (cfgAppInput) cfgAppInput.value = appConfig.appName || 'CloudVTurb';
               const cfgDomainInput = document.getElementById('cfgBaseDomainInput');
               if (cfgDomainInput) cfgDomainInput.value = appConfig.baseDomain || window.location.hostname;
-            }).catch(() => {});
+              updateDocsLinks();
+            }).catch(() => { updateDocsLinks(); });
 
             if (currentUser.onboarding_completed === false) {
               startOnboarding();
@@ -9050,7 +9067,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         if (cfgAppInput) cfgAppInput.value = appConfig.appName || 'CloudVTurb';
         const cfgDomainInput = document.getElementById('cfgBaseDomainInput');
         if (cfgDomainInput) cfgDomainInput.value = appConfig.baseDomain || window.location.hostname;
-      }).catch(() => {});
+        updateDocsLinks();
+      }).catch(() => { updateDocsLinks(); });
 
       try {
         const me = await api('/api/auth/me');

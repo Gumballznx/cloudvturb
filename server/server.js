@@ -63,6 +63,7 @@ const BASE_DOMAIN = (process.env.BASE_DOMAIN || '').toLowerCase();
 const PLAYER_DOMAIN = (process.env.PLAYER_DOMAIN || (BASE_DOMAIN ? `player.${BASE_DOMAIN}` : '')).toLowerCase();
 const DASH_DOMAIN = (process.env.DASH_DOMAIN || (BASE_DOMAIN ? `dash.${BASE_DOMAIN}` : '')).toLowerCase();
 const HELP_DOMAIN = (process.env.HELP_DOMAIN || (BASE_DOMAIN ? `help.${BASE_DOMAIN}` : '')).toLowerCase();
+const DOCS_DOMAIN = (process.env.DOCS_DOMAIN || (BASE_DOMAIN ? `docs.${BASE_DOMAIN}` : '')).toLowerCase();
 
 const DATA_DIR = process.env.DATA_DIR || (fs.existsSync(path.join(__dirname, 'data')) ? path.join(__dirname, 'data') : path.join(process.cwd(), 'data'));
 const VIDEOS_DIR = process.env.VIDEOS_DIR || (fs.existsSync(path.join(__dirname, 'videos')) ? path.join(__dirname, 'videos') : path.join(process.cwd(), 'videos'));
@@ -550,6 +551,12 @@ app.use((req, res, next) => {
       /^\/vsl_[a-zA-Z0-9_-]+$/.test(req.path)
     ) {
       return res.sendFile(path.join(PUBLIC_DIR, 'player.html'));
+    }
+  }
+
+  if (DOCS_DOMAIN && (host === DOCS_DOMAIN || host.startsWith('docs.'))) {
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/videos/')) {
+      return res.sendFile(path.join(PUBLIC_DIR, 'docs.html'));
     }
   }
 
@@ -1195,11 +1202,13 @@ app.get('/api/config', (req, res) => {
   const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
   const playerDomain = (isProd && PLAYER_DOMAIN) ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
   const dashDomain = (isProd && DASH_DOMAIN) ? `https://${DASH_DOMAIN}` : `${req.protocol}://${host}`;
+  const docsDomain = (isProd && DOCS_DOMAIN) ? `https://${DOCS_DOMAIN}` : `${req.protocol}://docs.${host}`;
   res.json({
     appName: APP_NAME,
     baseDomain: BASE_DOMAIN,
     playerDomain: playerDomain,
-    dashDomain: dashDomain
+    dashDomain: dashDomain,
+    docsDomain: docsDomain
   });
 });
 
@@ -5672,6 +5681,9 @@ app.get('/videos/:filename', (req, res) => {
 
 app.get('*', (req, res) => {
   const host = (req.headers.host || '').toLowerCase();
+  if (DOCS_DOMAIN && (host === DOCS_DOMAIN || host.startsWith('docs.'))) {
+    return res.sendFile(path.join(PUBLIC_DIR, 'docs.html'));
+  }
   if (HELP_DOMAIN && (host === HELP_DOMAIN || host.startsWith('help.'))) {
     return res.sendFile(path.join(PUBLIC_DIR, 'help.html'));
   }

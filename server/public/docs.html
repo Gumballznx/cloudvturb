@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F172A">
+  <meta name="description" content="Documentação técnica oficial do CloudVTurb: requisitos de VPS, comandos de instalação, Docker, Dokploy, Coolify, DNS Cloudflare, variáveis de ambiente e armazenamento R2.">
+  <title>Documentação Oficial — CloudVTurb</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('cloudvturb_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #FFFFFF;
+      --bg-alt: #F8FAFC;
+      --bg-card: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --text-dim: #94A3B8;
+      --primary: #2563EB;
+      --primary-hover: #1D4ED8;
+      --primary-light: #EFF6FF;
+      --primary-border: #BFDBFE;
+      --code-bg: #0F172A;
+      --code-text: #F8FAFC;
+      --sidebar-width: 290px;
+      --header-height: 64px;
+      --font-mono: 'JetBrains Mono', monospace;
+      --callout-info-bg: #EFF6FF;
+      --callout-info-border: #93C5FD;
+      --callout-info-text: #1E3A8A;
+      --callout-tip-bg: #F0FDF4;
+      --callout-tip-border: #86EFAC;
+      --callout-tip-text: #14532D;
+      --callout-warn-bg: #FFFBEB;
+      --callout-warn-border: #FCD34D;
+      --callout-warn-text: #78350F;
+    }
+    html[data-theme="dark"] {
+      --bg: #090D16;
+      --bg-alt: #0F172A;
+      --bg-card: #0F172A;
+      --border: #1E293B;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --primary: #3B82F6;
+      --primary-hover: #60A5FA;
+      --primary-light: rgba(59, 130, 246, 0.12);
+      --primary-border: rgba(59, 130, 246, 0.25);
+      --code-bg: #030712;
+      --code-text: #E2E8F0;
+      --callout-info-bg: rgba(37, 99, 235, 0.1);
+      --callout-info-border: rgba(59, 130, 246, 0.35);
+      --callout-info-text: #BFDBFE;
+      --callout-tip-bg: rgba(22, 163, 74, 0.1);
+      --callout-tip-border: rgba(34, 197, 94, 0.35);
+      --callout-tip-text: #BBF7D0;
+      --callout-warn-bg: rgba(217, 119, 6, 0.1);
+      --callout-warn-border: rgba(245, 158, 11, 0.35);
+      --callout-warn-text: #FDE68A;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background-color 0.2s, color 0.2s;
+    }
+    .docs-header {
+      position: sticky;
+      top: 0;
+      height: var(--header-height);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .brand-link span { color: var(--primary); }
+    .brand-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 12px;
+      border-radius: 7px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .header-link-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .header-cta-btn {
+      background: var(--primary);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 7px;
+      transition: background 0.2s;
+    }
+    .header-cta-btn:hover {
+      background: var(--primary-hover);
+    }
+    .btn-icon-toggle {
+      width: 34px;
+      height: 34px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-icon-toggle:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .docs-layout {
+      display: flex;
+      max-width: 1440px;
+      margin: 0 auto;
+      min-height: calc(100vh - var(--header-height));
+    }
+    .docs-sidebar {
+      width: var(--sidebar-width);
+      position: sticky;
+      top: var(--header-height);
+      height: calc(100vh - var(--header-height));
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 24px 16px 40px;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+      padding: 12px 10px 6px;
+    }
+    .sidebar-nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sidebar-nav-link:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .sidebar-nav-link.active {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .docs-main {
+      flex: 1;
+      min-width: 0;
+      padding: 40px 48px 100px;
+      max-width: 900px;
+    }
+    @media (max-width: 900px) {
+      .docs-sidebar { display: none; }
+      .docs-main { padding: 24px 20px 80px; }
+    }
+    .doc-article h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+    .doc-lead {
+      font-size: 17px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    .doc-section {
+      padding-top: 48px;
+      margin-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+    .doc-section:first-of-type {
+      padding-top: 0;
+      margin-top: 0;
+      border-top: none;
+    }
+    .doc-section h2 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+    }
+    .doc-section h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 24px 0 10px;
+      color: var(--text);
+    }
+    .doc-section p {
+      margin-bottom: 16px;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+    .doc-section ul, .doc-section ol {
+      margin: 0 0 20px 24px;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .doc-section li { margin-bottom: 6px; }
+    .doc-section strong { color: var(--text); }
+    .doc-section a {
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .doc-section a:hover {
+      color: var(--primary-hover);
+    }
+    .code-block {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 10px;
+      margin: 16px 0 24px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+    }
+    .btn-copy-code {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-copy-code:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    pre {
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+    code {
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+    }
+    p code, li code {
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+    .table-container {
+      overflow-x: auto;
+      margin: 16px 0 24px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }
+    th {
+      background: var(--bg-alt);
+      padding: 12px 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    tr:last-child td { border-bottom: none; }
+    .callout {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid transparent;
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+    .callout-info {
+      background: var(--callout-info-bg);
+      border-color: var(--primary);
+      color: var(--callout-info-text);
+    }
+    .callout-tip {
+      background: var(--callout-tip-bg);
+      border-color: #22C55E;
+      color: var(--callout-tip-text);
+    }
+    .callout-warn {
+      background: var(--callout-warn-bg);
+      border-color: #F59E0B;
+      color: var(--callout-warn-text);
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 20px 0 28px;
+    }
+    .provider-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .provider-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+    .provider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .provider-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .provider-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .provider-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .provider-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .provider-link:hover {
+      text-decoration: underline;
+    }
+    .doc-footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="docs-header">
+    <div class="header-left">
+      <a href="https://cloudvturb.online" class="brand-link">
+        <img src="/favicon.svg" alt="CloudVTurb" width="28" height="28" style="vertical-align: middle;">
+        <div><span>Cloud</span>VTurb</div>
+      </a>
+      <span class="brand-badge">Docs</span>
+    </div>
+
+    <div class="header-right">
+      <a href="https://github.com/Gumballxnz/meu-vturb" target="_blank" rel="noopener noreferrer" class="header-link-btn" title="Ver código no GitHub">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+      <button type="button" class="btn-icon-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema">
+        <svg id="moonIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+        <svg id="sunIcon" style="display: none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+        </svg>
+      </button>
+      <a href="https://dash.cloudvturb.online/login" class="header-cta-btn">Acessar Painel</a>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <div class="sidebar-section-title">Primeiros Passos</div>
+      <a href="#introducao" class="sidebar-nav-link active">Visão Geral & Arquitetura</a>
+      <a href="#requisitos-vps" class="sidebar-nav-link">Requisitos & Provedores VPS</a>
+
+      <div class="sidebar-section-title">Instalação & Deploy</div>
+      <a href="#deploy-dokploy" class="sidebar-nav-link">Deploy via Dokploy (Recomendado)</a>
+      <a href="#deploy-coolify" class="sidebar-nav-link">Deploy via Coolify</a>
+      <a href="#deploy-ubuntu" class="sidebar-nav-link">Deploy em VPS Crua (Docker)</a>
+
+      <div class="sidebar-section-title">Configurações Críticas</div>
+      <a href="#dns-cloudflare" class="sidebar-nav-link">DNS & Regras Cloudflare</a>
+      <a href="#variaveis-env" class="sidebar-nav-link">Dicionário de Variáveis (.env)</a>
+      <a href="#storage-r2" class="sidebar-nav-link">Armazenamento Cloudflare R2</a>
+      <a href="#google-oauth" class="sidebar-nav-link">Login com Google OAuth</a>
+
+      <div class="sidebar-section-title">Uso & Suporte</div>
+      <a href="#embed-player" class="sidebar-nav-link">Como Incorporar o Player</a>
+      <a href="#troubleshooting" class="sidebar-nav-link">Troubleshooting & FAQ</a>
+    </aside>
+
+    <main class="docs-main">
+      <article class="doc-article">
+        <h1>Documentação de Instalação e Arquitetura</h1>
+        <p class="doc-lead">
+          Guia exaustivo para implantar, configurar e operar sua própria infraestrutura de VSL de alta conversão sem mensalidades abusivas e com controle total.
+        </p>
+
+        <section id="introducao" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            1. Visão Geral & Arquitetura
+          </h2>
+          <p>
+            O <strong>CloudVTurb</strong> é uma solução completa de hospedagem e streaming adaptativo para VSLs (Video Sales Letters), criada para substituir ferramentas proprietárias (VTurb, PandaVideo, Vimeo) eliminando o custo recorrente por tráfego.
+          </p>
+          <p>
+            A plataforma opera sobre <strong>Node.js 20 LTS</strong>, banco relacional embarcado <strong>SQLite com WAL mode</strong> (garantindo concorrência massiva de leitura/escrita com zero latência de rede), transcodificação multi-bitrate via <strong>FFmpeg</strong> e entrega otimizada via HLS (HTTP Live Streaming).
+          </p>
+
+          <div class="callout callout-info">
+            <strong>Diferencial de Custo:</strong> Quando conectado a um bucket com egress gratuito como o <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noopener noreferrer">Cloudflare R2</a>, o tráfego gerado por milhões de visualizações das suas páginas tem custo zero de transferência de dados.
+          </div>
+        </section>
+
+        <section id="requisitos-vps" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+            2. Requisitos de Infraestrutura & Provedores VPS
+          </h2>
+          <p>
+            Como o processamento de vídeos (FFmpeg) exige recursos de CPU e memória RAM durante o upload, a escolha do servidor é o passo mais importante para um ambiente veloz.
+          </p>
+
+          <h3>Especificações de Servidor</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ambiente</th>
+                  <th>CPU</th>
+                  <th>Memória RAM</th>
+                  <th>Armazenamento</th>
+                  <th>Sistema Operacional</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Mínimo</strong> (1 a 15 VSLs)</td>
+                  <td>2 vCPU</td>
+                  <td>4 GB RAM</td>
+                  <td>40 GB SSD / NVMe</td>
+                  <td>Ubuntu 22.04 LTS x64</td>
+                </tr>
+                <tr>
+                  <td><strong>Recomendado</strong> (Produção)</td>
+                  <td>4 vCPU</td>
+                  <td>8 GB RAM</td>
+                  <td>80 GB NVMe</td>
+                  <td>Ubuntu 22.04 ou 24.04 LTS</td>
+                </tr>
+                <tr>
+                  <td><strong>Alta Escala</strong> (Transcoding constante)</td>
+                  <td>8 vCPU Dedicadas</td>
+                  <td>16 GB RAM</td>
+                  <td>160+ GB NVMe</td>
+                  <td>Ubuntu 24.04 LTS x64</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Provedores Recomendados (Links Diretos)</h3>
+          <div class="cards-grid">
+            <div class="provider-card">
+              <div>
+                <div class="provider-header">
+                  <span class="provider-title">Hetzner Cloud</span>
+                  <span class="provider-badge">Mais Recomendado</span>
+                </div>
+                <p class="provider-desc">
+                  Melhor relação custo-benefício mundial. 20 TB de tráfego inclusos e processadores AMD EPYC de alta velocidade para transcodificação de vídeo.
+                </p>
+              </div>
+              <a href="https://www.hetzner.com/cloud/" target="_blank" rel="noopener noreferrer" class="provider-link">
+                Acessar Hetzner Cloud &rarr;
+              </a>
+            </div>
+
+            <div class="provider-card">
+              <div>
+                <div class="provider-header">
+                  <span class="provider-title">Contabo</span>
+                  <span class="provider-badge">Maior Espaço</span>
+                </div>
+                <p class="provider-desc">
+                  Maior volume de disco e memória RAM por dólar. Excelente se você planeja manter centenas de GBs de arquivos gravados localmente na VPS.
+                </p>
+              </div>
+              <a href="https://contabo.com/en/vps/" target="_blank" rel="noopener noreferrer" class="provider-link">
+                Acessar Contabo VPS &rarr;
+              </a>
+            </div>
+
+            <div class="provider-card">
+              <div>
+                <div class="provider-header">
+                  <span class="provider-title">DigitalOcean</span>
+                  <span class="provider-badge">Estabilidade</span>
+                </div>
+                <p class="provider-desc">
+                  Infraestrutura de ponta com rede global redundante e deploy descomplicado de Droplets em poucos cliques.
+                </p>
+              </div>
+              <a href="https://www.digitalocean.com/products/droplets" target="_blank" rel="noopener noreferrer" class="provider-link">
+                Acessar DigitalOcean Droplets &rarr;
+              </a>
+            </div>
+
+            <div class="provider-card">
+              <div>
+                <div class="provider-header">
+                  <span class="provider-title">Vultr</span>
+                  <span class="provider-badge">Baixa Latência</span>
+                </div>
+                <p class="provider-desc">
+                  Opção com data center direto em São Paulo (Brasil) para quem busca ping reduzido no território nacional.
+                </p>
+              </div>
+              <a href="https://www.vultr.com/pricing/" target="_blank" rel="noopener noreferrer" class="provider-link">
+                Acessar Vultr Pricing &rarr;
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section id="deploy-dokploy" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            3. Deploy via Dokploy (Método Recomendado)
+          </h2>
+          <p>
+            O <a href="https://dokploy.com" target="_blank" rel="noopener noreferrer">Dokploy</a> é um painel open-source moderno e leve para gerenciar containers Docker com SSL automático Traefik e deploy contínuo via GitHub.
+          </p>
+
+          <h3>Passo 1: Instale o Dokploy na sua VPS</h3>
+          <p>Conecte-se na sua VPS via SSH e execute o comando oficial de instalação do Dokploy:</p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — terminal vps</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>curl -sSL https://dokploy.com/install.sh | sh</code></pre>
+          </div>
+
+          <h3>Passo 2: Configure a Aplicação no Painel</h3>
+          <ol>
+            <li>Acesse o painel do Dokploy pelo endereço <code>http://IP_DA_VPS:3000</code>.</li>
+            <li>Crie um novo <strong>Projeto</strong> (ex: <code>CloudVTurb</code>).</li>
+            <li>Adicione um novo serviço do tipo <strong>Application</strong>.</li>
+            <li>Selecione o Source como <strong>Git</strong> e insira a URL do repositório:
+              <br><code>https://github.com/Gumballxnz/meu-vturb.git</code> (Branch: <code>main</code>).
+            </li>
+            <li>Na aba <strong>General</strong>, configure a porta do container para <code>4000</code>.</li>
+            <li>Na aba <strong>Environment</strong>, adicione as variáveis de ambiente necessárias (veja a tabela na Seção 6).</li>
+            <li>Na aba <strong>Domains</strong>, configure os domínios:
+              <ul>
+                <li><code>cloudvturb.online</code> (Porta 4000)</li>
+                <li><code>dash.cloudvturb.online</code> (Porta 4000)</li>
+                <li><code>player.cloudvturb.online</code> (Porta 4000)</li>
+                <li><code>docs.cloudvturb.online</code> (Porta 4000)</li>
+              </ul>
+            </li>
+            <li>Clique em <strong>Deploy</strong>. O Dokploy fará o build da imagem Docker com Node 20 e FFmpeg automaticamente.</li>
+          </ol>
+        </section>
+
+        <section id="deploy-coolify" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            4. Deploy via Coolify
+          </h2>
+          <p>
+            O <a href="https://coolify.io" target="_blank" rel="noopener noreferrer">Coolify</a> é outra alternativa open-source conceituada para gerenciar aplicações em servidores próprios.
+          </p>
+          <p>Comando oficial de instalação do Coolify em VPS limpa:</p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — terminal vps</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash</code></pre>
+          </div>
+          <p>
+            Após a instalação, adicione uma nova aplicação conectando o repositório <code>https://github.com/Gumballxnz/meu-vturb</code>, defina os domínios FQDN e mapeie os volumes persistentes:
+          </p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>volumes persistentes</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>/opt/cloudvturb/data:/app/data
+/opt/cloudvturb/videos:/app/videos</code></pre>
+          </div>
+        </section>
+
+        <section id="deploy-ubuntu" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            5. Deploy em VPS Crua (Docker & Docker Compose)
+          </h2>
+          <p>
+            Se preferir rodar diretamente no sistema operacional sem painéis adicionais, execute a sequência abaixo em um terminal Ubuntu limpo:
+          </p>
+
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — atualizacao e docker</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code># 1. Atualize o sistema operacional
+sudo apt update && sudo apt upgrade -y
+
+# 2. Instale dependencias essenciais
+sudo apt install -y curl git ufw ffmpeg
+
+# 3. Instale o Docker Engine oficial
+curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+
+# 4. Configure o firewall UFW
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 4000/tcp
+sudo ufw --force enable</code></pre>
+          </div>
+
+          <p>Em seguida, clone o código do repositório e configure as variáveis:</p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — clone e deploy</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code># 5. Clone o repositorio no diretorio de servicos
+git clone https://github.com/Gumballxnz/meu-vturb.git /opt/cloudvturb
+cd /opt/cloudvturb
+
+# 6. Configure o arquivo .env
+cp .env.example .env
+nano .env
+
+# 7. Inicie a aplicacao em background com Docker Compose
+docker compose up -d --build</code></pre>
+          </div>
+        </section>
+
+        <section id="dns-cloudflare" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            6. DNS & Regras Cloudflare
+          </h2>
+          <p>
+            O gerenciamento de DNS pelo <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer">painel da Cloudflare</a> é altamente recomendado pela proteção Anti-DDoS e roteamento global ultrarrápido.
+          </p>
+
+          <h3>Tabela de Apontamentos DNS Obrigatórios</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Nome do Host</th>
+                  <th>Destino / Conteúdo</th>
+                  <th>Proxy (Nuvem)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>A</code></td>
+                  <td><code>@</code> (raiz)</td>
+                  <td><code>IP_DA_SUA_VPS</code></td>
+                  <td>Laranja (Proxied)</td>
+                </tr>
+                <tr>
+                  <td><code>A</code></td>
+                  <td><code>dash</code></td>
+                  <td><code>IP_DA_SUA_VPS</code></td>
+                  <td>Laranja ou Cinza (veja nota)</td>
+                </tr>
+                <tr>
+                  <td><code>A</code></td>
+                  <td><code>player</code></td>
+                  <td><code>IP_DA_SUA_VPS</code></td>
+                  <td>Laranja (Proxied)</td>
+                </tr>
+                <tr>
+                  <td><code>A</code></td>
+                  <td><code>docs</code></td>
+                  <td><code>IP_DA_SUA_VPS</code></td>
+                  <td>Laranja (Proxied)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout callout-warn">
+            <strong>Atenção ao Limite de Upload no Cloudflare:</strong> O proxy gratuito da Cloudflare (nuvem laranja) possui um limite de 100 MB por requisição HTTP. Para permitir uploads de arquivos MP4 pesados (acima de 100 MB), use o subdomínio <code>dash</code> com <strong>nuvem cinza (DNS Only)</strong> ou utilize a integração com <strong>Cloudflare R2</strong>.
+          </div>
+        </section>
+
+        <section id="variaveis-env" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            7. Dicionário de Variáveis de Ambiente (.env)
+          </h2>
+          <p>
+            Todas as credenciais sensíveis e domínios são controlados exclusivamente pelo arquivo <code>.env</code>.
+          </p>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Variável</th>
+                  <th>Obrigatória</th>
+                  <th>Exemplo de Valor</th>
+                  <th>Finalidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>PORT</code></td>
+                  <td>Sim</td>
+                  <td><code>4000</code></td>
+                  <td>Porta TCP onde a aplicação escuta no container.</td>
+                </tr>
+                <tr>
+                  <td><code>BASE_DOMAIN</code></td>
+                  <td>Sim</td>
+                  <td><code>cloudvturb.online</code></td>
+                  <td>Domínio raiz da página de vendas / landing.</td>
+                </tr>
+                <tr>
+                  <td><code>DASH_DOMAIN</code></td>
+                  <td>Sim</td>
+                  <td><code>dash.cloudvturb.online</code></td>
+                  <td>Subdomínio de acesso ao painel de controle e login.</td>
+                </tr>
+                <tr>
+                  <td><code>PLAYER_DOMAIN</code></td>
+                  <td>Sim</td>
+                  <td><code>player.cloudvturb.online</code></td>
+                  <td>Subdomínio isolado onde os players são executados.</td>
+                </tr>
+                <tr>
+                  <td><code>DOCS_DOMAIN</code></td>
+                  <td>Sim</td>
+                  <td><code>docs.cloudvturb.online</code></td>
+                  <td>Subdomínio exclusivo onde a documentação é servida.</td>
+                </tr>
+                <tr>
+                  <td><code>JWT_SECRET</code></td>
+                  <td>Sim</td>
+                  <td><code>64_caracteres_hex</code></td>
+                  <td>Chave privada de assinatura dos tokens de autenticação.</td>
+                </tr>
+                <tr>
+                  <td><code>RESEND_API_KEY</code></td>
+                  <td>Opcional</td>
+                  <td><code>re_123456789...</code></td>
+                  <td>Chave de API do <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Resend</a> para e-mails de aprovação e senha.</td>
+                </tr>
+                <tr>
+                  <td><code>GOOGLE_CLIENT_ID</code></td>
+                  <td>Opcional</td>
+                  <td><code>xxxx.apps.googleusercontent.com</code></td>
+                  <td>Client ID para login com Google do <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud</a>.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Para gerar uma chave criptográfica forte para o seu <code>JWT_SECRET</code>, execute no terminal:</p>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — gerador de chave jwt</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>openssl rand -hex 64</code></pre>
+          </div>
+        </section>
+
+        <section id="storage-r2" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+            8. Armazenamento Cloudflare R2 (Custo Zero de Egress)
+          </h2>
+          <p>
+            O <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noopener noreferrer">Cloudflare R2</a> é uma solução compatível com a API S3 da Amazon, com a vantagem decisiva de ter <strong>taxa zero de saída de dados</strong>.
+          </p>
+
+          <h3>Passo a Passo de Configuração</h3>
+          <ol>
+            <li>Acesse o <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noopener noreferrer">Painel Cloudflare R2</a>.</li>
+            <li>Clique em <strong>Create Bucket</strong> e atribua um nome (ex: <code>meu-vturb-vsls</code>).</li>
+            <li>No menu lateral direito do R2, clique em <strong>Manage R2 API Tokens</strong> e crie um token com permissão <strong>Object Read & Write</strong>.</li>
+            <li>Anote o <strong>Access Key ID</strong> e o <strong>Secret Access Key</strong>.</li>
+            <li>Acesse a aba <strong>Settings</strong> do bucket criado e ative <strong>Public Access</strong> ou adicione um subdomínio próprio (ex: <code>cdn.cloudvturb.online</code>).</li>
+            <li>No painel do CloudVTurb, acesse <strong>Configurações &rarr; Armazenamento</strong>, selecione <strong>Cloudflare R2 / S3</strong> e salve os dados.</li>
+          </ol>
+        </section>
+
+        <section id="google-oauth" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            9. Login com Google OAuth
+          </h2>
+          <p>
+            Para habilitar o botão de login social em 1 clique com contas Google:
+          </p>
+          <ol>
+            <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>.</li>
+            <li>Crie um novo projeto ou selecione um existente.</li>
+            <li>Acesse <strong>APIs e Serviços &rarr; Credenciais</strong> e clique em <strong>Criar Credenciais &rarr; ID do cliente OAuth</strong>.</li>
+            <li>Tipo de aplicativo: <strong>Aplicativo da Web</strong>.</li>
+            <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione:
+              <br><code>https://dash.cloudvturb.online</code>
+              <br><code>https://cloudvturb.online</code>
+            </li>
+            <li>Copie o <strong>Client ID</strong> gerado e adicione ao seu arquivo <code>.env</code> na variável <code>GOOGLE_CLIENT_ID</code>.</li>
+          </ol>
+        </section>
+
+        <section id="embed-player" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            10. Como Incorporar o Player nas Suas Páginas
+          </h2>
+          <p>
+            O player do CloudVTurb foi construído para funcionar com máxima fluidez e compatibilidade em qualquer construtor visual: <strong>Elementor, WordPress, Webflow, Leadlovers, ClickFunnels</strong> ou HTML puro.
+          </p>
+
+          <h3>Código Iframe Responsivo 16:9</h3>
+          <div class="code-block">
+            <div class="code-header">
+              <span>html — embed responsivo</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>&lt;!-- Pre-carregamento rapido do player --&gt;
+&lt;link rel="preconnect" href="https://player.cloudvturb.online"&gt;
+&lt;link rel="dns-prefetch" href="https://player.cloudvturb.online"&gt;
+
+&lt;!-- Container responsivo com proporcao 16:9 --&gt;
+&lt;div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:12px;"&gt;
+  &lt;iframe src="https://player.cloudvturb.online/players/SEU_VIDEO_ID"
+          style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+          allow="autoplay; fullscreen"
+          allowfullscreen&gt;&lt;/iframe&gt;
+&lt;/div&gt;</code></pre>
+          </div>
+        </section>
+
+        <section id="troubleshooting" class="doc-section">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            11. Troubleshooting & FAQ
+          </h2>
+
+          <h3>Como verificar os logs da aplicação</h3>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — logs docker</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>docker logs -f --tail 100 meu-vturb-app</code></pre>
+          </div>
+
+          <h3>Como atualizar a aplicação para a versão mais recente</h3>
+          <div class="code-block">
+            <div class="code-header">
+              <span>bash — atualizacao git</span>
+              <button type="button" class="btn-copy-code" onclick="copyCode(this)">Copiar</button>
+            </div>
+            <pre><code>cd /opt/cloudvturb
+git pull origin main
+docker compose up -d --build</code></pre>
+          </div>
+        </section>
+
+        <div class="doc-footer">
+          <div>© 2026 CloudVTurb. Documentação Oficial Open Source.</div>
+          <div>
+            <a href="https://github.com/Gumballxnz/meu-vturb" target="_blank" rel="noopener noreferrer" style="color:var(--primary);text-decoration:none;">
+              Repositório no GitHub &rarr;
+            </a>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
+
+  <script>
+    function updateThemeIcons(theme) {
+      const moon = document.getElementById('moonIcon');
+      const sun = document.getElementById('sunIcon');
+      if (moon && sun) {
+        if (theme === 'dark') {
+          moon.style.display = 'none';
+          sun.style.display = 'block';
+        } else {
+          moon.style.display = 'block';
+          sun.style.display = 'none';
+        }
+      }
+    }
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('cloudvturb_theme', next); } catch (e) {}
+      updateThemeIcons(next);
+    }
+    updateThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
+
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre code');
+      if (!pre) return;
+      const text = pre.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copiado!';
+        btn.style.color = '#22C55E';
+        btn.style.borderColor = '#22C55E';
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.style.color = '';
+          btn.style.borderColor = '';
+        }, 2000);
+      });
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.getAttribute('id');
+          document.querySelectorAll('.sidebar-nav-link').forEach(link => {
+            if (link.getAttribute('href') === '#' + id) {
+              link.classList.add('active');
+            } else {
+              link.classList.remove('active');
+            }
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+
+    document.querySelectorAll('.doc-section').forEach(sec => observer.observe(sec));
+  </script>
+</body>
+</html>

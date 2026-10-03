@@ -4260,20 +4260,56 @@
       .sidebar.open {
         transform: translateX(0);
       }
-      .app-main {
-        margin-left: 0;
+      .app-main,
+      body.is-editor-mode .app-main,
+      body.is-player-details-mode .app-main {
+        margin-left: 0 !important;
+      }
+      body.is-editor-mode .sidebar,
+      body.is-player-details-mode .sidebar {
+        width: 300px !important;
+        min-width: 0 !important;
+        max-width: 85vw !important;
       }
       .btn-mobile-toggle {
-        display: block;
+        display: flex !important;
       }
       .btn-sidebar-mobile-close {
-        display: flex;
+        display: flex !important;
       }
       .editor-grid-wrapper {
         grid-template-columns: 1fr;
       }
       .preview-sticky-box {
         position: static;
+      }
+      .vturb-editor-topbar {
+        padding: 0 12px !important;
+        height: 50px !important;
+      }
+      .vturb-editor-title-wrap {
+        max-width: 50% !important;
+        gap: 6px !important;
+      }
+      .vturb-editor-title {
+        font-size: 13px !important;
+      }
+      .vturb-editor-top-actions {
+        gap: 8px !important;
+      }
+      .btn-vturb-embed {
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+      }
+      .vturb-stage-container,
+      .vturb-preview-stage {
+        padding: 12px !important;
+      }
+      .vturb-phone-mockup {
+        width: 100% !important;
+        max-width: 310px !important;
+        height: 100% !important;
+        max-height: 580px !important;
       }
     }
 
@@ -4589,17 +4625,19 @@
     body.is-player-details-mode .topbar {
       display: none !important;
     }
-    body.is-editor-mode .sidebar,
-    body.is-player-details-mode .sidebar {
-      width: 330px !important;
-      min-width: 330px !important;
-      background-color: var(--bg-surface) !important;
-      border-right: 1px solid var(--border-subtle) !important;
-      color: var(--text-main) !important;
-    }
-    body.is-editor-mode .app-main,
-    body.is-player-details-mode .app-main {
-      margin-left: 330px !important;
+    @media (min-width: 961px) {
+      body.is-editor-mode .sidebar,
+      body.is-player-details-mode .sidebar {
+        width: 330px !important;
+        min-width: 330px !important;
+        background-color: var(--bg-surface) !important;
+        border-right: 1px solid var(--border-subtle) !important;
+        color: var(--text-main) !important;
+      }
+      body.is-editor-mode .app-main,
+      body.is-player-details-mode .app-main {
+        margin-left: 330px !important;
+      }
     }
     body.is-editor-mode .content-container,
     body.is-player-details-mode .content-container {
@@ -7280,6 +7318,9 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
         <div class="vturb-editor-layout">
 
           <div class="vturb-editor-topbar">
+            <button type="button" class="btn-icon-subtle btn-mobile-toggle" onclick="toggleSidebar()" title="Abrir menu" style="margin-right: 6px; flex-shrink: 0;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
             <div class="vturb-editor-title-wrap">
               <h1 class="vturb-editor-title" id="vturbEditorTitle" onclick="promptRenameVideo()" title="Clique para renomear">
                 Título do Vídeo
@@ -7345,6 +7386,9 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
       <section class="tab-view" id="viewPlayerDetails">
         <div class="vturb-editor-layout">
           <div class="vturb-editor-topbar">
+            <button type="button" class="btn-icon-subtle btn-mobile-toggle" onclick="toggleSidebar()" title="Abrir menu" style="margin-right: 6px; flex-shrink: 0;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
             <div class="vturb-editor-title-wrap" style="max-width: 60%;">
               <h1 class="vturb-editor-title" id="vturbDetailsTitle" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 Título do Vídeo

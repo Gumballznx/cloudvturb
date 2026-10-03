@@ -1199,6 +1199,18 @@
             hasUserUnmuted = false;
             smartOverlay.classList.remove('hidden');
           }
+        } else if (e.data.type === 'STOP' || e.data.type === 'PAUSE') {
+          if (video) {
+            try {
+              video.pause();
+              video.muted = true;
+            } catch (_) {}
+          }
+          if (e.data.type === 'STOP' && typeof hlsInstance !== 'undefined' && hlsInstance) {
+            try {
+              hlsInstance.stopLoad();
+            } catch (_) {}
+          }
         }
       });
 

@@ -5822,20 +5822,57 @@
               <label class="form-label">Texto da Headline</label>
               <input type="text" id="edHeadlineText" class="form-input-text" placeholder="Ex: Este vídeo sairá do ar em breve!" oninput="liveUpdateSettings()">
             </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+              <div class="form-row">
+                <label class="form-label">Cor do Fundo</label>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <input type="color" id="edHeadlineBgColor" value="#1e293b" oninput="syncColor('edHeadlineBgColor', 'edHeadlineBgColorHex')" style="width: 36px; height: 32px; border: 1px solid var(--border-subtle); background: var(--bg-card); border-radius: 4px; cursor: pointer;">
+                  <input type="text" id="edHeadlineBgColorHex" value="#1e293b" class="form-input-text" style="width: 80px; padding: 4px 6px; font-size: 11.5px;" oninput="syncColor('edHeadlineBgColorHex', 'edHeadlineBgColor')">
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Cor do Texto</label>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <input type="color" id="edHeadlineTextColor" value="#ffffff" oninput="syncColor('edHeadlineTextColor', 'edHeadlineTextColorHex')" style="width: 36px; height: 32px; border: 1px solid var(--border-subtle); background: var(--bg-card); border-radius: 4px; cursor: pointer;">
+                  <input type="text" id="edHeadlineTextColorHex" value="#ffffff" class="form-input-text" style="width: 80px; padding: 4px 6px; font-size: 11.5px;" oninput="syncColor('edHeadlineTextColorHex', 'edHeadlineTextColor')">
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelFiltro" style="display: none;">
             <div class="toggle-row-clean">
               <div>
                 <div class="toggle-info-title">Filtro de Tráfego Antifraude</div>
-                <div class="toggle-info-desc">Bloqueia espionagem de concorrentes e bots de tráfego pago</div>
+                <div class="toggle-info-desc">Bloqueia espionagem de concorrentes e tráfego inválido</div>
               </div>
               <label class="switch-clean">
                 <input type="checkbox" id="edTrafficFilterEnabled" onchange="liveUpdateSettings()">
                 <span class="slider-clean"></span>
               </label>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 14px;">Proteja suas campanhas ativando a verificação de fingerprint para garantir que apenas leads reais consumam seu conteúdo.</p>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">Dispositivos Permitidos</label>
+              <select id="edTrafficFilterDevice" class="form-select-dark" onchange="liveUpdateSettings()">
+                <option value="all" selected>Todos os Dispositivos</option>
+                <option value="mobile">Apenas Celulares / Mobile</option>
+                <option value="desktop">Apenas Computadores / Desktop</option>
+              </select>
+            </div>
+            <div class="toggle-row-clean" style="margin-top: 14px;">
+              <div>
+                <div class="toggle-info-title">Exigir Parâmetros UTM na URL</div>
+                <div class="toggle-info-desc">Permite reprodução apenas para cliques de anúncios com UTMs</div>
+              </div>
+              <label class="switch-clean">
+                <input type="checkbox" id="edTrafficFilterUtm" onchange="liveUpdateSettings()">
+                <span class="slider-clean"></span>
+              </label>
+            </div>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">Mensagem de Bloqueio</label>
+              <input type="text" id="edTrafficFilterMessage" class="form-input-text" placeholder="Conteúdo restrito para o seu dispositivo" oninput="liveUpdateSettings()">
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelCta" style="display: none;">
@@ -5876,7 +5913,7 @@
             </div>
             <div class="form-row">
               <label class="form-label">Link de Venda / Checkout</label>
-              <input type="url" id="edCtaUrl" class="form-input-text" value="" placeholder="https://seusite.com/checkout" oninput="liveUpdateSettings()">
+              <input type="url" id="edCtaUrl" class="form-input-text" value="" placeholder="https://exemplo.com/checkout" oninput="liveUpdateSettings()">
             </div>
             <div class="form-row">
               <label class="form-label">Cor do Botão CTA</label>
@@ -5905,14 +5942,25 @@
             <div class="toggle-row-clean">
               <div>
                 <div class="toggle-info-title">Ativar ThumbSniper™</div>
-                <div class="toggle-info-desc">Testes A/B automáticos de miniaturas para aumentar taxa de clique</div>
+                <div class="toggle-info-desc">Testes e mini-vídeos em looping para prender a atenção</div>
               </div>
               <label class="switch-clean">
                 <input type="checkbox" id="edThumbSniperEnabled" onchange="liveUpdateSettings()">
                 <span class="slider-clean"></span>
               </label>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 14px;">O algoritmo alterna entre diferentes frames do vídeo para descobrir qual miniatura gera maior retenção.</p>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">Início do Teaser em Looping (segundos)</label>
+              <input type="number" id="edThumbSniperStart" class="form-input-text" value="0" min="0" oninput="liveUpdateSettings()">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Fim do Teaser em Looping (segundos)</label>
+              <input type="number" id="edThumbSniperEnd" class="form-input-text" value="4" min="1" oninput="liveUpdateSettings()">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Texto da Tag de Prévia</label>
+              <input type="text" id="edThumbSniperText" class="form-input-text" value="Prévia" placeholder="Prévia" oninput="liveUpdateSettings()">
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelResume" style="display: none;">
@@ -5959,28 +6007,52 @@
             <div class="toggle-row-clean">
               <div>
                 <div class="toggle-info-title">Ativar Mini-Ganchos™</div>
-                <div class="toggle-info-desc">Disparos de alertas sonoros quando o espectador muda de aba</div>
+                <div class="toggle-info-desc">Disparos de alertas e som quando o visitante troca de aba</div>
               </div>
               <label class="switch-clean">
                 <input type="checkbox" id="edMiniHooksEnabled" onchange="liveUpdateSettings()">
                 <span class="slider-clean"></span>
               </label>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 14px;">Quando o espectador desfoca da aba do seu vídeo, sons sutis e alteração de título chamam o lead de volta.</p>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">Título da Aba ao Desfocar</label>
+              <input type="text" id="edMiniHooksTitle" class="form-input-text" value="Volte para o seu vídeo!" placeholder="Volte para o seu vídeo!" oninput="liveUpdateSettings()">
+            </div>
+            <div class="toggle-row-clean" style="margin-top: 14px;">
+              <div>
+                <div class="toggle-info-title">Alerta Sonoro Suave</div>
+                <div class="toggle-info-desc">Toca um sinal sonoro sutil gerado pelo navegador</div>
+              </div>
+              <label class="switch-clean">
+                <input type="checkbox" id="edMiniHooksSound" checked onchange="liveUpdateSettings()">
+                <span class="slider-clean"></span>
+              </label>
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelPixels" style="display: none;">
             <div class="toggle-row-clean">
               <div>
                 <div class="toggle-info-title">Pixels & Eventos de PostMessage</div>
-                <div class="toggle-info-desc">Dispara eventos para Facebook Pixel em 25%, 50%, 75%, 90% e Pitch</div>
+                <div class="toggle-info-desc">Dispara eventos em 25%, 50%, 75%, 90% e Pitch</div>
               </div>
               <label class="switch-clean">
                 <input type="checkbox" id="edPixels" onchange="liveUpdateSettings()">
                 <span class="slider-clean"></span>
               </label>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 14px;">Eventos automáticos transmitidos para a página pai permitindo otimização das campanhas de tráfego.</p>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">Facebook Pixel ID</label>
+              <input type="text" id="edPixelFbId" class="form-input-text" placeholder="Ex: 123456789012345" oninput="liveUpdateSettings()">
+            </div>
+            <div class="form-row">
+              <label class="form-label">TikTok Pixel ID</label>
+              <input type="text" id="edPixelTiktokId" class="form-input-text" placeholder="Ex: C8XXXXXXXXXXXXXXXX" oninput="liveUpdateSettings()">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Google Tag / GA4 ID</label>
+              <input type="text" id="edPixelGoogleId" class="form-input-text" placeholder="Ex: G-XXXXXXXXXX ou AW-XXXXXXXX" oninput="liveUpdateSettings()">
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelLegendas" style="display: none;">
@@ -5994,7 +6066,14 @@
                 <span class="slider-clean"></span>
               </label>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 14px;">Carregue arquivos de legendas no formato WebVTT (.vtt) para aumentar a retenção em vídeos sem áudio inicial.</p>
+            <div class="form-row" style="margin-top: 14px;">
+              <label class="form-label">URL do Arquivo WebVTT (.vtt)</label>
+              <input type="url" id="edCaptionsUrl" class="form-input-text" placeholder="https://exemplo.com/legendas.vtt" oninput="liveUpdateSettings()">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Rótulo do Idioma</label>
+              <input type="text" id="edCaptionsLabel" class="form-input-text" value="Português" placeholder="Português" oninput="liveUpdateSettings()">
+            </div>
           </div>
 
           <div class="vturb-editor-panel" id="edPanelPlayback" style="display: none;">
@@ -14880,16 +14959,16 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       setVal('edAudioNoticeBorderRadius', s.audioNoticeBorderRadius || '8px');
       setVal('edAudioNoticeGlow', s.audioNoticeGlow || 'subtle');
 
-      const isCtaOn = Boolean(s.ctaEnabled && s.ctaUrl && s.ctaUrl.trim() !== '' && s.ctaUrl !== 'https://seusite.com/checkout');
+      const isCtaOn = Boolean(s.ctaEnabled && s.ctaUrl && s.ctaUrl.trim() !== '');
       setChecked('edCtaEnabled', isCtaOn);
       setVal('edCtaTime', s.ctaTime !== undefined ? s.ctaTime : 10);
       setVal('edCtaPosition', s.ctaPosition || 'outside');
       setVal('edCtaAnimation', s.ctaAnimation || 'pulse');
-      setVal('edCtaText', isCtaOn ? (s.ctaText || '') : '');
-      setVal('edCtaUrl', isCtaOn ? (s.ctaUrl || '') : '');
+      setVal('edCtaText', s.ctaText || '');
+      setVal('edCtaUrl', s.ctaUrl || '');
       setVal('edCtaColor', s.ctaColor || '#00cd3c');
       setVal('edCtaColorHex', s.ctaColor || '#00cd3c');
-      setVal('edCtaSubtext', isCtaOn ? (s.ctaSubtext || '') : '');
+      setVal('edCtaSubtext', s.ctaSubtext || '');
       setChecked('edCtaNewTab', s.ctaNewTab !== false);
 
       setChecked('edFakeProgress', s.fakeProgress !== false);
@@ -14903,14 +14982,37 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       setVal('edResumeTextColor', s.resumeTextColor || '#ffffff');
       setVal('edResumeTextColorHex', s.resumeTextColor || '#ffffff');
       setChecked('edPixels', !!s.pixels);
+      setVal('edPixelFbId', s.pixelFbId || '');
+      setVal('edPixelTiktokId', s.pixelTiktokId || '');
+      setVal('edPixelGoogleId', s.pixelGoogleId || '');
 
       setChecked('edTurboEnabled', !!s.turbo);
+
       setChecked('edHeadlineEnabled', !!s.headlines);
       setVal('edHeadlineText', s.headlineText || '');
+      setVal('edHeadlineBgColor', s.headlineBgColor || '#1e293b');
+      setVal('edHeadlineBgColorHex', s.headlineBgColor || '#1e293b');
+      setVal('edHeadlineTextColor', s.headlineTextColor || '#ffffff');
+      setVal('edHeadlineTextColorHex', s.headlineTextColor || '#ffffff');
+
       setChecked('edTrafficFilterEnabled', !!s.trafficFilter);
+      setVal('edTrafficFilterDevice', s.trafficFilterDevice || 'all');
+      setChecked('edTrafficFilterUtm', !!s.trafficFilterUtm);
+      setVal('edTrafficFilterMessage', s.trafficFilterMessage || '');
+
       setChecked('edThumbSniperEnabled', !!s.thumbSniper);
+      setVal('edThumbSniperStart', s.thumbSniperStart !== undefined ? s.thumbSniperStart : 0);
+      setVal('edThumbSniperEnd', s.thumbSniperEnd !== undefined ? s.thumbSniperEnd : 4);
+      setVal('edThumbSniperText', s.thumbSniperText || 'Prévia');
+
       setChecked('edMiniHooksEnabled', !!s.miniGanchos);
+      setVal('edMiniHooksTitle', s.miniHooksTitle || 'Volte para o seu vídeo!');
+      setChecked('edMiniHooksSound', s.miniHooksSound !== false);
+
       setChecked('edCaptionsEnabled', !!s.subtitles);
+      setVal('edCaptionsUrl', s.captionsUrl || '');
+      setVal('edCaptionsLabel', s.captionsLabel || 'Português');
+
       setVal('edPlaybackRate', s.playbackRate || '1.0');
       setChecked('edVideoLoop', !!s.loop);
 
@@ -15392,7 +15494,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       setBadge('badgeTurbo', !!s.turbo);
       setBadge('badgeHeadlines', !!s.headlines);
       setBadge('badgeFiltro', !!s.trafficFilter);
-      const isCtaOn = Boolean(s.ctaEnabled && s.ctaUrl && s.ctaUrl.trim() !== '' && s.ctaUrl !== 'https://seusite.com/checkout');
+      const isCtaOn = Boolean(s.ctaEnabled && s.ctaUrl && s.ctaUrl.trim() !== '');
       setBadge('badgeCta', isCtaOn);
       setBadge('badgeThumb', !!s.thumbSniper);
       setBadge('badgeResume', s.resume !== false);
@@ -15544,13 +15646,28 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         resumeBgColor: getVal('edResumeBgColorHex', 'rgba(0, 0, 0, 0.7)'),
         resumeTextColor: getVal('edResumeTextColorHex', '#ffffff'),
         pixels: getChecked('edPixels', false),
+        pixelFbId: getVal('edPixelFbId', ''),
+        pixelTiktokId: getVal('edPixelTiktokId', ''),
+        pixelGoogleId: getVal('edPixelGoogleId', ''),
         turbo: getChecked('edTurboEnabled', false),
         headlines: getChecked('edHeadlineEnabled', false),
         headlineText: getVal('edHeadlineText', ''),
+        headlineBgColor: getVal('edHeadlineBgColor', '#1e293b'),
+        headlineTextColor: getVal('edHeadlineTextColor', '#ffffff'),
         trafficFilter: getChecked('edTrafficFilterEnabled', false),
+        trafficFilterDevice: getVal('edTrafficFilterDevice', 'all'),
+        trafficFilterUtm: getChecked('edTrafficFilterUtm', false),
+        trafficFilterMessage: getVal('edTrafficFilterMessage', ''),
         thumbSniper: getChecked('edThumbSniperEnabled', false),
+        thumbSniperStart: parseFloat(getVal('edThumbSniperStart', '0')) || 0,
+        thumbSniperEnd: parseFloat(getVal('edThumbSniperEnd', '4')) || 4,
+        thumbSniperText: getVal('edThumbSniperText', 'Prévia'),
         miniGanchos: getChecked('edMiniHooksEnabled', false),
+        miniHooksTitle: getVal('edMiniHooksTitle', 'Volte para o seu vídeo!'),
+        miniHooksSound: getChecked('edMiniHooksSound', true),
         subtitles: getChecked('edCaptionsEnabled', false),
+        captionsUrl: getVal('edCaptionsUrl', ''),
+        captionsLabel: getVal('edCaptionsLabel', 'Português'),
         playbackRate: getVal('edPlaybackRate', '1.0'),
         loop: getChecked('edVideoLoop', false)
       };
@@ -15568,6 +15685,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       iframes.forEach(iframe => {
         if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({
+            type: 'UPDATE_ALL_SETTINGS',
+            payload: s
+          }, '*');
           iframe.contentWindow.postMessage({
             type: 'UPDATE_AUDIO_NOTICE',
             payload: {
@@ -15623,6 +15744,32 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         p.set('block_seek', s.blockSeek ? '1' : '0');
         p.set('resume', s.resume ? '1' : '0');
         p.set('pixels', s.pixels ? '1' : '0');
+        if (s.pixelFbId) p.set('pix_fb', s.pixelFbId);
+        if (s.pixelTiktokId) p.set('pix_tt', s.pixelTiktokId);
+        if (s.pixelGoogleId) p.set('pix_ga', s.pixelGoogleId);
+        p.set('turbo', s.turbo ? '1' : '0');
+        p.set('headline', s.headlines ? '1' : '0');
+        p.set('headline_text', s.headlineText || '');
+        p.set('headline_bg', s.headlineBgColor || '#1e293b');
+        p.set('headline_color', s.headlineTextColor || '#ffffff');
+        p.set('traffic_filter', s.trafficFilter ? '1' : '0');
+        p.set('tf_device', s.trafficFilterDevice || 'all');
+        p.set('tf_utm', s.trafficFilterUtm ? '1' : '0');
+        p.set('tf_msg', s.trafficFilterMessage || '');
+        p.set('thumb_sniper', s.thumbSniper ? '1' : '0');
+        p.set('ts_start', s.thumbSniperStart || '0');
+        p.set('ts_end', s.thumbSniperEnd || '4');
+        p.set('ts_text', s.thumbSniperText || 'Prévia');
+        p.set('mini_ganchos', s.miniGanchos ? '1' : '0');
+        p.set('mg_title', s.miniHooksTitle || 'Volte para o seu vídeo!');
+        p.set('mg_sound', s.miniHooksSound ? '1' : '0');
+        p.set('subtitles', s.subtitles ? '1' : '0');
+        p.set('captions_url', s.captionsUrl || '');
+        p.set('captions_label', s.captionsLabel || 'Português');
+        p.set('playback_rate', s.playbackRate || '1.0');
+        p.set('loop', s.loop ? '1' : '0');
+        p.set('disable_pause', s.disablePause ? '1' : '0');
+        p.set('ctrl_progress', s.progressBar ? '1' : '0');
 
         if (s.ctaEnabled) {
           p.set('cta', '1');

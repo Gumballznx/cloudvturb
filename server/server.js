@@ -465,6 +465,73 @@ try {
   db.exec("DELETE FROM analytics_events WHERE visitor_id LIKE 'test_vis%' OR session_id LIKE 'test_sess%'");
 } catch (e) {}
 
+function getDefaultVideoSettings() {
+  return {
+    barColor: '#2563EB',
+    borderRadius: '16px',
+    aspectRatio: '16:9',
+    smartAutoplay: true,
+    autoplayText: 'Seu vídeo ja iniciou\nClique para escutar',
+    audioNoticeEnabled: true,
+    audioNoticeText: 'Seu vídeo ja iniciou\nClique para escutar',
+    audioNoticeStyle: 'square',
+    audioNoticeSize: 'medium',
+    audioNoticePosition: 'center',
+    audioNoticeAnimation: 'none',
+    audioNoticeIcon: 'volume-muted',
+    audioNoticeBgColor: '#2563EB',
+    audioNoticeTextColor: '#ffffff',
+    audioNoticeIconBgColor: '#2563EB',
+    audioNoticeIconColor: '#FFFFFF',
+    audioNoticeBorderColor: '#1D4ED8',
+    audioNoticeBorderWidth: '0px',
+    audioNoticeBorderRadius: '8px',
+    audioNoticeGlow: 'subtle',
+    fakeProgress: true,
+    blockSeek: true,
+    ctaEnabled: false,
+    ctaTime: 10,
+    ctaPosition: 'outside',
+    ctaAnimation: 'pulse',
+    ctaText: '',
+    ctaUrl: '',
+    ctaColor: '#00cd3c',
+    ctaSubtext: '',
+    ctaNewTab: true,
+    resume: true,
+    resumeTitle: 'Já começou a ver este vídeo',
+    resumePlayText: 'Continuar Assistindo',
+    resumeReplayText: 'Reiniciar o vídeo',
+    resumeBgColor: 'rgba(0, 0, 0, 0.7)',
+    resumeTextColor: '#ffffff',
+    pixels: false,
+    pixelFbId: '',
+    pixelTiktokId: '',
+    pixelGoogleId: '',
+    turbo: false,
+    headlines: false,
+    headlineText: '',
+    headlineBgColor: '#1e293b',
+    headlineTextColor: '#ffffff',
+    trafficFilter: false,
+    trafficFilterDevice: 'all',
+    trafficFilterUtm: false,
+    trafficFilterMessage: '',
+    thumbSniper: false,
+    thumbSniperStart: 0,
+    thumbSniperEnd: 4,
+    thumbSniperText: 'Prévia',
+    miniGanchos: false,
+    miniHooksTitle: 'Volte para o seu vídeo!',
+    miniHooksSound: true,
+    subtitles: false,
+    captionsUrl: '',
+    captionsLabel: 'Português',
+    playbackRate: '1.0',
+    loop: false
+  };
+}
+
 const getSetting = (key, defaultVal) => {
   const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
   return row ? row.value : defaultVal;
@@ -3771,7 +3838,7 @@ app.post('/api/videos', authMiddleware, (req, res) => {
     resolvedSize,
     cleanUrl,
     resolvedDuration || null,
-    JSON.stringify(settings || {}),
+    JSON.stringify(Object.assign(getDefaultVideoSettings(), settings || {})),
     initialStatus,
     initialProgress
   );
@@ -4687,7 +4754,7 @@ app.get('/api/analytics/video/:id', authMiddleware, (req, res) => {
   } catch (e) {}
 
   const actionButtons = [];
-  if (Boolean(videoSettings.ctaEnabled && videoSettings.ctaUrl && videoSettings.ctaUrl.trim() && videoSettings.ctaUrl !== 'https://seusite.com/checkout')) {
+  if (Boolean(videoSettings.ctaEnabled && videoSettings.ctaUrl && videoSettings.ctaUrl.trim())) {
     const ctaSec = Number(videoSettings.ctaTime || 0);
     const m = Math.floor(ctaSec / 60).toString().padStart(2, '0');
     const s = (ctaSec % 60).toString().padStart(2, '0');
@@ -5421,23 +5488,7 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
       }
     }
 
-    const defaultSettings = {
-      barColor: '#2563EB',
-      borderRadius: '16px',
-      aspectRatio: '16:9',
-      smartAutoplay: true,
-      autoplayText: 'Seu vídeo ja iniciou\\nClique para escutar',
-      fakeProgress: true,
-      blockSeek: true,
-      ctaEnabled: false,
-      ctaTime: 10,
-      ctaText: '',
-      ctaUrl: '',
-      ctaColor: '#10b981',
-      ctaSubtext: '',
-      resume: true,
-      pixels: false
-    };
+    const defaultSettings = getDefaultVideoSettings();
 
     const realDuration = getVideoDurationFormatted(targetPath);
 

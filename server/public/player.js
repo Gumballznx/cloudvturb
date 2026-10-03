@@ -96,7 +96,7 @@
             btn.rel = 'noopener noreferrer';
             var btnColor = event.data.cta.color || '#00cd3c';
             btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;padding:15px 24px;border-radius:12px;font-family:Inter,-apple-system,sans-serif;font-weight:700;font-size:18px;letter-spacing:0.5px;text-decoration:none;text-transform:uppercase;background:' + btnColor + ';color:#ffffff;animation:vturbCtaPulse 1.8s infinite ease-in-out;box-shadow:0 10px 25px -5px ' + btnColor + '80;';
-            btn.textContent = event.data.cta.text || 'Quero Este SEGREDO';
+            btn.textContent = event.data.cta.text || '';
             ctaWrap.appendChild(btn);
             if (event.data.cta.subtext) {
               var sub = document.createElement('div');

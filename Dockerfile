@@ -7,8 +7,7 @@ WORKDIR /app
 COPY server/package.json ./
 RUN npm install --production
 
-COPY server/server.js ./
-COPY server/vturb-analytics-api.js ./
+COPY server/*.js ./
 COPY server/public ./public
 
 EXPOSE 4000

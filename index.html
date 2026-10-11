@@ -5311,6 +5311,248 @@
         font-size: 10.5px !important;
       }
     }
+    /* Billing & Checkout Modal */
+    .billing-cycle-switch {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      padding: 3px;
+      margin: 0 auto 20px;
+    }
+    .billing-cycle-btn {
+      background: none;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .billing-cycle-btn.active {
+      background: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+    .billing-save-tag {
+      font-size: 10px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 6px;
+      border-radius: 9999px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .checkout-plans-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 768px) {
+      .checkout-plans-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .plan-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .plan-card:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-card-hover);
+    }
+    .plan-card.selected {
+      border-color: #2563eb;
+      background: rgba(37, 99, 235, 0.04);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+    .plan-badge-pill {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+      display: inline-block;
+      align-self: flex-start;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .plan-card.popular .plan-badge-pill {
+      background: rgba(37, 99, 235, 0.15);
+      color: #2563eb;
+      border-color: rgba(37, 99, 235, 0.35);
+    }
+    .plan-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+    .plan-price-wrap {
+      margin: 8px 0 12px;
+    }
+    .plan-price-amount {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+    .plan-price-period {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .plan-features-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 14px 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .plan-feature-item {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .plan-feature-item svg {
+      flex-shrink: 0;
+      color: #10b981;
+    }
+    .payment-methods-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 500px) {
+      .payment-methods-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .payment-method-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .payment-method-card:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-card-hover);
+    }
+    .payment-method-card.selected {
+      border-color: #2563eb;
+      background: rgba(37, 99, 235, 0.05);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+    .payment-logo-img {
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 3px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      flex-shrink: 0;
+    }
+    .payment-method-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .payment-method-name {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .payment-method-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .checkout-auth-banner {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .checkout-auth-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .checkout-auth-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .sidebar-plan-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      background: rgba(37, 99, 235, 0.12);
+      color: #2563eb;
+      border: 1px solid rgba(37, 99, 235, 0.25);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sidebar-upgrade-link {
+      font-size: 11px;
+      font-weight: 700;
+      color: #2563eb;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .sidebar-upgrade-link:hover {
+      text-decoration: underline;
+    }
 </style>
 </head>
 <body>
@@ -5399,6 +5641,10 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
               <span>Configurações</span>
             </button>
+            <button class="popover-item" id="popoverBillingBtn" style="display: none;" onclick="openCheckoutModal(); closeProfileMenu();">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+              <span>Planos e Assinatura</span>
+            </button>
             <div class="popover-divider"></div>
             <button class="popover-item popover-item-danger" onclick="promptLogout()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -5410,6 +5656,10 @@
             <div class="user-avatar" id="sidebarAvatar">U</div>
             <div class="sidebar-user-details">
               <span class="sidebar-user-name" id="sidebarUserName"></span>
+              <div id="sidebarUserPlanBadge" style="display: none; align-items: center; gap: 6px; margin-top: 2px;">
+                <span class="sidebar-plan-pill" id="sidebarPlanPillText">Free</span>
+                <span class="sidebar-upgrade-link" onclick="event.stopPropagation(); openCheckoutModal();">Upgrade</span>
+              </div>
             </div>
             <svg class="sidebar-chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
@@ -8558,6 +8808,213 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     </div>
   </div>
 
+  <div class="modal-overlay" id="plansCheckoutModal" onclick="if(event.target===this)closeCheckoutModal()">
+    <div class="modal-box" style="max-width: 840px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;">
+      <div class="modal-header-clean" style="padding: 18px 24px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(37, 99, 235, 0.12); color: #2563eb; display: flex; align-items: center; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+          </div>
+          <div>
+            <div style="font-size: 17px; font-weight: 800; color: var(--text-main);">Planos e Assinatura CloudVTurb</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Hospedagem de alta conversão sem limites para suas VSLs</div>
+          </div>
+        </div>
+        <button type="button" class="btn-icon" onclick="closeCheckoutModal()">&times;</button>
+      </div>
+
+      <div class="modal-body-clean" style="padding: 24px; overflow-y: auto; flex: 1;">
+        <!-- Banner de Usuario Autenticado -->
+        <div class="checkout-auth-banner">
+          <div class="checkout-auth-info">
+            <div class="checkout-auth-avatar" id="checkoutUserAvatar">U</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                <span id="checkoutUserName">Nome do Usuário</span>
+                <span class="sidebar-plan-pill" id="checkoutUserPlanPill">Plano Free</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted);" id="checkoutUserEmail">email@exemplo.com</div>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: #10b981; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <span>Conta Autenticada</span>
+          </div>
+        </div>
+
+        <!-- Seletor de Ciclo Mensal / Anual -->
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div class="billing-cycle-switch">
+            <button type="button" class="billing-cycle-btn active" id="btnCycleMonthly" onclick="setBillingCycle('monthly')">
+              <span>Mensal</span>
+            </button>
+            <button type="button" class="billing-cycle-btn" id="btnCycleAnnual" onclick="setBillingCycle('annual')">
+              <span>Anual</span>
+              <span class="billing-save-tag">Economize 20%</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Grid dos Planos -->
+        <div class="checkout-plans-grid">
+          <!-- Starter -->
+          <div class="plan-card" id="cardPlanStarter" onclick="selectPlanOption('starter')">
+            <span class="plan-badge-pill">Iniciante</span>
+            <div class="plan-title">Starter</div>
+            <div class="plan-price-wrap">
+              <span class="plan-price-amount" id="priceValStarter">990</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-period" id="pricePeriodStarter">/mês</span>
+            </div>
+            <ul class="plan-features-list">
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Até 5 vídeos ativos</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>15 GB de armazenamento</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Player sem marca d'água</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Smart Autoplay e Turbo Pre-pitch</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Pro (Popular) -->
+          <div class="plan-card popular selected" id="cardPlanPro" onclick="selectPlanOption('pro')">
+            <span class="plan-badge-pill">Mais Popular</span>
+            <div class="plan-title">Pro</div>
+            <div class="plan-price-wrap">
+              <span class="plan-price-amount" id="priceValPro">2.490</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-period" id="pricePeriodPro">/mês</span>
+            </div>
+            <ul class="plan-features-list">
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Até 20 vídeos ativos</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>60 GB de armazenamento</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Domínios protegidos ilimitados</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Teste A/B de VSLs integrado</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Prioridade FFmpeg de alta velocidade</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Scale -->
+          <div class="plan-card" id="cardPlanScale" onclick="selectPlanOption('scale')">
+            <span class="plan-badge-pill">Agências</span>
+            <div class="plan-title">Scale</div>
+            <div class="plan-price-wrap">
+              <span class="plan-price-amount" id="priceValScale">4.990</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-period" id="pricePeriodScale">/mês</span>
+            </div>
+            <ul class="plan-features-list">
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Até 100 vídeos ativos</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>200 GB de armazenamento</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Todos os recursos Pro liberados</span>
+              </li>
+              <li class="plan-feature-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Suporte prioritário via WhatsApp</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Seção de Pagamento: Metodos com Logos Oficiais -->
+        <div style="font-size: 13.5px; font-weight: 700; color: var(--text-main); margin-bottom: 10px;">
+          Selecione a Carteira Móvel (M-Pesa / e-Mola)
+        </div>
+        <div class="payment-methods-grid">
+          <!-- M-Pesa -->
+          <div class="payment-method-card selected" id="cardPayMpesa" onclick="selectPaymentProvider('mpesa')">
+            <img src="/images/payments/logo-mpesa.jpeg" alt="M-Pesa" class="payment-logo-img">
+            <div class="payment-method-text">
+              <div class="payment-method-name">
+                <span>M-Pesa</span>
+                <span style="font-size: 11px; color: #ef4444; font-weight: 600;">Vodacom</span>
+              </div>
+              <div class="payment-method-desc">Contas 84 e 85 (Prompt PIN instantâneo)</div>
+            </div>
+          </div>
+
+          <!-- e-Mola -->
+          <div class="payment-method-card" id="cardPayEmola" onclick="selectPaymentProvider('emola')">
+            <img src="/images/payments/logo-emola.jpeg" alt="e-Mola" class="payment-logo-img">
+            <div class="payment-method-text">
+              <div class="payment-method-name">
+                <span>e-Mola</span>
+                <span style="font-size: 11px; color: #f59e0b; font-weight: 600;">Movitel</span>
+              </div>
+              <div class="payment-method-desc">Contas 86 e 87 (Transferência rápida)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Numero de Telefone para STK Push -->
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">
+            Número de Telemóvel para Pagamento
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <div style="padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center;">
+              +258
+            </div>
+            <input type="tel" id="checkoutPhoneInput" class="form-input-text" placeholder="84 123 4567" style="flex: 1; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 5px;">
+            Você receberá um pop-up na tela do seu telefone solicitando o PIN para debitar o valor da assinatura.
+          </div>
+        </div>
+
+        <!-- Feedback de Status / Processando -->
+        <div id="checkoutStatusFeedback" style="display: none; padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px;"></div>
+      </div>
+
+      <!-- Footer do Checkout -->
+      <div class="modal-footer-clean" style="padding: 16px 24px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface);">
+        <div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Total da Assinatura:</div>
+          <div style="font-size: 18px; font-weight: 800; color: var(--text-main);">
+            <span id="checkoutTotalAmount">2.490</span> MZN
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn-clean-secondary" onclick="closeCheckoutModal()">Cancelar</button>
+          <button type="button" class="btn-primary-action" id="btnSubmitCheckoutPayment" onclick="submitBillingPayment()" style="display: inline-flex; align-items: center; gap: 8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+            <span id="btnSubmitCheckoutText">Pagar via M-Pesa</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="securityToastAlert" class="security-toast-alert" style="display: none;">
     <div class="security-toast-icon">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -9133,7 +9590,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
               const cfgDomainInput = document.getElementById('cfgBaseDomainInput');
               if (cfgDomainInput) cfgDomainInput.value = appConfig.baseDomain || window.location.hostname;
               updateDocsLinks();
-            }).catch(() => { updateDocsLinks(); });
+              updatePlanUI();
+            }).catch(() => { updateDocsLinks(); updatePlanUI(); });
 
             if (currentUser.onboarding_completed === false) {
               startOnboarding();
@@ -9191,7 +9649,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const cfgDomainInput = document.getElementById('cfgBaseDomainInput');
         if (cfgDomainInput) cfgDomainInput.value = appConfig.baseDomain || window.location.hostname;
         updateDocsLinks();
-      }).catch(() => { updateDocsLinks(); });
+        updatePlanUI();
+      }).catch(() => { updateDocsLinks(); updatePlanUI(); });
 
       try {
         const me = await api('/api/auth/me');
@@ -9383,6 +9842,213 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         document.getElementById('ownerCategoryLabel').style.display = 'none';
         const btnStorage = document.getElementById('btnSettingsStorage');
         if (btnStorage) btnStorage.style.display = 'none';
+      }
+      updatePlanUI();
+    }
+
+    let currentCheckoutPlan = 'pro';
+    let currentCheckoutCycle = 'monthly';
+    let currentCheckoutProvider = 'mpesa';
+
+    const PLAN_PRICING = {
+      starter: { monthly: 990, annual: 9900 },
+      pro: { monthly: 2490, annual: 24900 },
+      scale: { monthly: 4990, annual: 49900 }
+    };
+
+    function updatePlanUI() {
+      const badge = document.getElementById('sidebarUserPlanBadge');
+      const popBilling = document.getElementById('popoverBillingBtn');
+      if (!appConfig || !appConfig.cloudHosted) {
+        if (badge) badge.style.display = 'none';
+        if (popBilling) popBilling.style.display = 'none';
+        return;
+      }
+      if (popBilling) popBilling.style.display = 'flex';
+      if (badge) badge.style.display = 'flex';
+      const pillText = document.getElementById('sidebarPlanPillText');
+      if (pillText && currentUser) {
+        pillText.textContent = (currentUser.plan || 'free').toUpperCase();
+      }
+    }
+
+    function openCheckoutModal(initialPlan) {
+      if (initialPlan && PLAN_PRICING[initialPlan]) {
+        currentCheckoutPlan = initialPlan;
+      }
+      const modal = document.getElementById('plansCheckoutModal');
+      if (!modal) return;
+
+      if (currentUser) {
+        const nameEl = document.getElementById('checkoutUserName');
+        const emailEl = document.getElementById('checkoutUserEmail');
+        const avatarEl = document.getElementById('checkoutUserAvatar');
+        const planPillEl = document.getElementById('checkoutUserPlanPill');
+        const phoneInput = document.getElementById('checkoutPhoneInput');
+
+        if (nameEl) nameEl.textContent = currentUser.name || currentUser.full_name || 'Utilizador';
+        if (emailEl) emailEl.textContent = currentUser.email || '';
+        if (avatarEl) avatarEl.textContent = (currentUser.name || 'U').charAt(0).toUpperCase();
+        if (planPillEl) planPillEl.textContent = `Plano ${(currentUser.plan || 'free').toUpperCase()}`;
+        if (phoneInput && !phoneInput.value && currentUser.phone) {
+          phoneInput.value = currentUser.phone;
+        }
+      }
+
+      const fb = document.getElementById('checkoutStatusFeedback');
+      if (fb) fb.style.display = 'none';
+
+      selectPlanOption(currentCheckoutPlan);
+      setBillingCycle(currentCheckoutCycle);
+      selectPaymentProvider(currentCheckoutProvider);
+      modal.classList.add('show');
+    }
+
+    function closeCheckoutModal() {
+      const modal = document.getElementById('plansCheckoutModal');
+      if (modal) modal.classList.remove('show');
+    }
+
+    function setBillingCycle(cycle) {
+      currentCheckoutCycle = cycle;
+      const btnMonthly = document.getElementById('btnCycleMonthly');
+      const btnAnnual = document.getElementById('btnCycleAnnual');
+      if (btnMonthly) btnMonthly.classList.toggle('active', cycle === 'monthly');
+      if (btnAnnual) btnAnnual.classList.toggle('active', cycle === 'annual');
+
+      const pStarter = document.getElementById('priceValStarter');
+      const pPro = document.getElementById('priceValPro');
+      const pScale = document.getElementById('priceValScale');
+      const perStarter = document.getElementById('pricePeriodStarter');
+      const perPro = document.getElementById('pricePeriodPro');
+      const perScale = document.getElementById('pricePeriodScale');
+
+      if (cycle === 'annual') {
+        if (pStarter) pStarter.textContent = '9.900';
+        if (pPro) pPro.textContent = '24.900';
+        if (pScale) pScale.textContent = '49.900';
+        if (perStarter) perStarter.textContent = '/ano';
+        if (perPro) perPro.textContent = '/ano';
+        if (perScale) perScale.textContent = '/ano';
+      } else {
+        if (pStarter) pStarter.textContent = '990';
+        if (pPro) pPro.textContent = '2.490';
+        if (pScale) pScale.textContent = '4.990';
+        if (perStarter) perStarter.textContent = '/mês';
+        if (perPro) perPro.textContent = '/mês';
+        if (perScale) perScale.textContent = '/mês';
+      }
+      updateCheckoutTotal();
+    }
+
+    function selectPlanOption(planId) {
+      currentCheckoutPlan = planId;
+      ['starter', 'pro', 'scale'].forEach(id => {
+        const card = document.getElementById(`cardPlan${id.charAt(0).toUpperCase() + id.slice(1)}`);
+        if (card) card.classList.toggle('selected', id === planId);
+      });
+      updateCheckoutTotal();
+    }
+
+    function selectPaymentProvider(provider) {
+      currentCheckoutProvider = provider;
+      const cardMpesa = document.getElementById('cardPayMpesa');
+      const cardEmola = document.getElementById('cardPayEmola');
+      const btnText = document.getElementById('btnSubmitCheckoutText');
+      const phoneInput = document.getElementById('checkoutPhoneInput');
+
+      if (cardMpesa) cardMpesa.classList.toggle('selected', provider === 'mpesa');
+      if (cardEmola) cardEmola.classList.toggle('selected', provider === 'emola');
+      if (btnText) btnText.textContent = provider === 'emola' ? 'Pagar via e-Mola' : 'Pagar via M-Pesa';
+      if (phoneInput && !phoneInput.value) {
+        phoneInput.placeholder = provider === 'emola' ? '86 123 4567' : '84 123 4567';
+      }
+    }
+
+    function updateCheckoutTotal() {
+      const totalEl = document.getElementById('checkoutTotalAmount');
+      if (!totalEl) return;
+      const pricing = PLAN_PRICING[currentCheckoutPlan] || PLAN_PRICING.pro;
+      const amount = currentCheckoutCycle === 'annual' ? pricing.annual : pricing.monthly;
+      totalEl.textContent = amount.toLocaleString('pt-BR');
+    }
+
+    async function submitBillingPayment() {
+      const phoneInput = document.getElementById('checkoutPhoneInput');
+      const phoneVal = phoneInput ? phoneInput.value.trim() : '';
+      const fb = document.getElementById('checkoutStatusFeedback');
+      const btn = document.getElementById('btnSubmitCheckoutPayment');
+
+      if (!phoneVal) {
+        if (fb) {
+          fb.style.display = 'block';
+          fb.style.background = 'rgba(239, 68, 68, 0.12)';
+          fb.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+          fb.style.color = '#ef4444';
+          fb.innerHTML = '<div style="font-weight: 700; font-size: 13px;">Número obrigatório</div><div style="font-size: 12px; margin-top: 2px;">Por favor, informe o seu número de telemóvel para receber a solicitação de PIN.</div>';
+        }
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      if (fb) {
+        fb.style.display = 'block';
+        fb.style.background = 'rgba(37, 99, 235, 0.1)';
+        fb.style.border = '1px solid rgba(37, 99, 235, 0.3)';
+        fb.style.color = '#2563eb';
+        fb.innerHTML = '<div style="font-weight: 700; font-size: 13px;">Iniciando pagamento...</div><div style="font-size: 12px; margin-top: 2px;">Conectando à e2payments. Por favor, aguarde o pop-up de PIN no seu telemóvel.</div>';
+      }
+
+      try {
+        const res = await api('/api/billing/checkout', {
+          method: 'POST',
+          body: JSON.stringify({
+            planId: currentCheckoutPlan,
+            cycle: currentCheckoutCycle,
+            provider: currentCheckoutProvider,
+            phone: phoneVal
+          })
+        });
+
+        if (res && res.success) {
+          fb.style.display = 'block';
+          fb.style.background = 'rgba(16, 185, 129, 0.12)';
+          fb.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+          fb.style.color = '#10b981';
+          fb.innerHTML = `
+            <div style="font-weight: 700; font-size: 13px;">Solicitação enviada com sucesso!</div>
+            <div style="font-size: 12.5px; margin-top: 4px; line-height: 1.5;">
+              ${res.message || 'Verifique o seu telemóvel e introduza o PIN para autorizar.'}
+              <div style="margin-top: 6px; font-weight: 600; font-size: 12px; color: var(--text-main);">
+                Referência da Transação: <code style="background: var(--bg-card); padding: 2px 6px; border-radius: 4px;">${res.reference}</code>
+              </div>
+            </div>
+          `;
+
+          if (res.status === 'paid' || res.status === 'simulated') {
+            if (currentUser) {
+              currentUser.plan = res.plan;
+              currentUser.plan_cycle = res.cycle;
+              try { localStorage.setItem('cloudvturb_user', JSON.stringify(currentUser)); } catch (e) {}
+              updatePlanUI();
+            }
+            setTimeout(() => {
+              showToast('Plano ativado com sucesso! Aproveite todos os recursos.');
+              closeCheckoutModal();
+            }, 3000);
+          }
+        }
+      } catch (err) {
+        if (fb) {
+          fb.style.display = 'block';
+          fb.style.background = 'rgba(239, 68, 68, 0.12)';
+          fb.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+          fb.style.color = '#ef4444';
+          fb.innerHTML = `<div style="font-weight: 700; font-size: 13px;">Falha no pagamento</div><div style="font-size: 12px; margin-top: 2px;">${err.message || 'Erro ao processar transação.'}</div>`;
+        }
+      } finally {
+        setButtonLoading(btn, false);
       }
     }
 

@@ -378,6 +378,31 @@ try { db.exec("ALTER TABLE videos ADD COLUMN blocked_reason TEXT DEFAULT NULL");
 try { db.exec("ALTER TABLE videos ADD COLUMN status TEXT DEFAULT 'ready'"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN optimization_progress INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE api_keys ADD COLUMN token TEXT"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN plan_status TEXT DEFAULT 'active'"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN plan_expires_at DATETIME DEFAULT NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN plan_cycle TEXT DEFAULT 'monthly'"); } catch (e) {}
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS billing_transactions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      plan_id TEXT NOT NULL,
+      cycle TEXT DEFAULT 'monthly',
+      amount REAL NOT NULL,
+      currency TEXT DEFAULT 'MZN',
+      provider TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      reference TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      transaction_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_billing_tx_user ON billing_transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_billing_tx_ref ON billing_transactions(reference);
+  `);
+} catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder_id)"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_videos_deleted ON videos(deleted_at)"); } catch (e) {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_quota_logs_key_time ON api_quota_logs(api_key_id, timestamp)"); } catch (e) {}
@@ -1136,7 +1161,7 @@ function authMiddleware(req, res, next) {
     if (decoded.isTemp2FA || decoded.isTempSetup2FA) {
       return res.status(401).json({ error: 'Autenticação de dois fatores pendente.' });
     }
-    const user = db.prepare('SELECT id, name, email, role, status, full_name, country, phone, address_street, postal_code, state_province, onboarding_completed, avatar_url, owner_id, token_version, two_factor_enabled, require_member_2fa, google_connected, google_email FROM users WHERE id = ?').get(decoded.id);
+    const user = db.prepare('SELECT id, name, email, role, status, full_name, country, phone, address_street, postal_code, state_province, onboarding_completed, avatar_url, owner_id, token_version, two_factor_enabled, require_member_2fa, google_connected, google_email, plan, plan_status, plan_expires_at, plan_cycle FROM users WHERE id = ?').get(decoded.id);
     if (!user) return res.status(401).json({ error: 'Usuário não encontrado.' });
     if (user.status !== 'approved') return res.status(403).json({ error: 'Acesso bloqueado ou pendente de aprovação.' });
     if (decoded.token_version !== undefined && user.token_version && decoded.token_version !== user.token_version) {
@@ -1275,8 +1300,190 @@ app.get('/api/config', (req, res) => {
     baseDomain: BASE_DOMAIN,
     playerDomain: playerDomain,
     dashDomain: dashDomain,
-    docsDomain: docsDomain
+    docsDomain: docsDomain,
+    cloudHosted: process.env.CLOUD_HOSTED === 'true',
+    billingEnabled: process.env.BILLING_ENABLED === 'true'
   });
+});
+
+const e2payment = require('./e2payment');
+
+const BILLING_PLANS = {
+  free: {
+    id: 'free',
+    name: 'Free',
+    badge: 'Degustação',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    videoLimit: 2,
+    storageGB: 1,
+    viewsLimit: '1.500 visualizações/mês',
+    features: [
+      'Até 2 vídeos ativos',
+      '1 GB de armazenamento',
+      'Smart Autoplay liberado',
+      'Analytics de retenção básico'
+    ]
+  },
+  starter: {
+    id: 'starter',
+    name: 'Starter',
+    badge: 'Iniciante',
+    monthlyPrice: 990,
+    annualPrice: 9900,
+    videoLimit: 5,
+    storageGB: 15,
+    viewsLimit: '50.000 visualizações/mês',
+    features: [
+      'Até 5 vídeos ativos',
+      '15 GB de armazenamento',
+      'Player sem marca d água',
+      'Smart Autoplay e Turbo Pre-pitch',
+      'Analytics de retenção em tempo real'
+    ]
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    badge: 'Mais Popular',
+    monthlyPrice: 2490,
+    annualPrice: 24900,
+    videoLimit: 20,
+    storageGB: 60,
+    viewsLimit: '250.000 visualizações/mês',
+    features: [
+      'Até 20 vídeos ativos',
+      '60 GB de armazenamento',
+      'Domínios autorizados ilimitados',
+      'Teste A/B de VSLs integrado',
+      'Prioridade na fila de conversão FFmpeg',
+      'Player ultrarrápido sem marca d água'
+    ]
+  },
+  scale: {
+    id: 'scale',
+    name: 'Scale',
+    badge: 'Agências',
+    monthlyPrice: 4990,
+    annualPrice: 49900,
+    videoLimit: 100,
+    storageGB: 200,
+    viewsLimit: '1.000.000 visualizações/mês',
+    features: [
+      'Até 100 vídeos ativos',
+      '200 GB de armazenamento',
+      'Todos os recursos Pro liberados',
+      'Largura de banda dedicada',
+      'Suporte prioritário via WhatsApp'
+    ]
+  }
+};
+
+app.get('/api/billing/plans', (req, res) => {
+  res.json({
+    plans: BILLING_PLANS,
+    cloudHosted: process.env.CLOUD_HOSTED === 'true',
+    billingEnabled: process.env.BILLING_ENABLED === 'true'
+  });
+});
+
+app.post('/api/billing/checkout', authMiddleware, async (req, res) => {
+  const { planId, cycle, provider, phone } = req.body || {};
+  const selectedPlan = BILLING_PLANS[planId];
+  if (!selectedPlan || planId === 'free') {
+    return res.status(400).json({ error: 'Plano inválido para checkout.' });
+  }
+  if (provider !== 'mpesa' && provider !== 'emola') {
+    return res.status(400).json({ error: 'Método de pagamento inválido. Escolha M-Pesa ou e-Mola.' });
+  }
+  if (!phone) {
+    return res.status(400).json({ error: 'Por favor, informe o seu número de telemóvel.' });
+  }
+
+  const isAnnual = cycle === 'annual';
+  const amount = isAnnual ? selectedPlan.annualPrice : selectedPlan.monthlyPrice;
+  const reference = e2payment.gerarReferencia(planId);
+
+  try {
+    const txId = 'tx_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    db.prepare(`
+      INSERT INTO billing_transactions (id, user_id, plan_id, cycle, amount, currency, provider, phone, reference, status)
+      VALUES (?, ?, ?, ?, ?, 'MZN', ?, ?, ?, 'pending')
+    `).run(txId, req.user.id, planId, isAnnual ? 'annual' : 'monthly', amount, provider, phone, reference);
+
+    const paymentResult = await e2payment.processarPagamento({
+      amount,
+      reference,
+      phone,
+      provider,
+      planId
+    });
+
+    if (paymentResult.success) {
+      const isPaid = paymentResult.status === 'paid' || paymentResult.status === 'simulated';
+      const newStatus = isPaid ? 'completed' : 'pending';
+
+      db.prepare(`
+        UPDATE billing_transactions 
+        SET status = ?, transaction_id = ?
+        WHERE id = ?
+      `).run(newStatus, paymentResult.transactionId || reference, txId);
+
+      if (isPaid) {
+        const expiresDays = isAnnual ? 365 : 30;
+        const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
+        db.prepare(`
+          UPDATE users 
+          SET plan = ?, plan_status = 'active', plan_cycle = ?, plan_expires_at = ?
+          WHERE id = ?
+        `).run(planId, isAnnual ? 'annual' : 'monthly', expiresAt, req.user.id);
+      }
+
+      return res.json({
+        success: true,
+        status: paymentResult.status,
+        message: paymentResult.message,
+        reference: reference,
+        plan: planId,
+        cycle: isAnnual ? 'annual' : 'monthly',
+        amount
+      });
+    } else {
+      db.prepare(`
+        UPDATE billing_transactions 
+        SET status = 'failed'
+        WHERE id = ?
+      `).run(txId);
+      return res.status(400).json({
+        success: false,
+        error: paymentResult.message || 'Falha ao processar pagamento.'
+      });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Erro interno ao iniciar transação.' });
+  }
+});
+
+app.post('/api/billing/webhook', (req, res) => {
+  const data = req.body || {};
+  const reference = data.reference || (data.data && data.data.reference);
+  const status = data.status || (data.data && data.data.status);
+
+  if (reference) {
+    const tx = db.prepare('SELECT * FROM billing_transactions WHERE reference = ?').get(reference);
+    if (tx && (status === 'success' || status === 'paid' || status === 'completed')) {
+      db.prepare("UPDATE billing_transactions SET status = 'completed' WHERE id = ?").run(tx.id);
+      const isAnnual = tx.cycle === 'annual';
+      const expiresDays = isAnnual ? 365 : 30;
+      const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
+      db.prepare(`
+        UPDATE users 
+        SET plan = ?, plan_status = 'active', plan_cycle = ?, plan_expires_at = ?
+        WHERE id = ?
+      `).run(tx.plan_id, tx.cycle || 'monthly', expiresAt, tx.user_id);
+    }
+  }
+  res.json({ received: true });
 });
 
 function generate8DigitCode() {

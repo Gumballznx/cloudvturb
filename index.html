@@ -8862,7 +8862,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             <span class="plan-badge-pill">Iniciante</span>
             <div class="plan-title">Starter</div>
             <div class="plan-price-wrap">
-              <span class="plan-price-amount" id="priceValStarter">990</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-amount" id="priceValStarter">87</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
               <span class="plan-price-period" id="pricePeriodStarter">/mês</span>
             </div>
             <ul class="plan-features-list">
@@ -8890,7 +8890,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             <span class="plan-badge-pill">Mais Popular</span>
             <div class="plan-title">Pro</div>
             <div class="plan-price-wrap">
-              <span class="plan-price-amount" id="priceValPro">2.490</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-amount" id="priceValPro">197</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
               <span class="plan-price-period" id="pricePeriodPro">/mês</span>
             </div>
             <ul class="plan-features-list">
@@ -8922,7 +8922,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
             <span class="plan-badge-pill">Agências</span>
             <div class="plan-title">Scale</div>
             <div class="plan-price-wrap">
-              <span class="plan-price-amount" id="priceValScale">4.990</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
+              <span class="plan-price-amount" id="priceValScale">299</span> <span style="font-size: 13px; font-weight: 700;">MZN</span>
               <span class="plan-price-period" id="pricePeriodScale">/mês</span>
             </div>
             <ul class="plan-features-list">
@@ -9001,7 +9001,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         <div>
           <div style="font-size: 11.5px; color: var(--text-muted);">Total da Assinatura:</div>
           <div style="font-size: 18px; font-weight: 800; color: var(--text-main);">
-            <span id="checkoutTotalAmount">2.490</span> MZN
+            <span id="checkoutTotalAmount">197</span> MZN
           </div>
         </div>
         <div style="display: flex; gap: 10px;">
@@ -9851,9 +9851,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     let currentCheckoutProvider = 'mpesa';
 
     const PLAN_PRICING = {
-      starter: { monthly: 990, annual: 9900 },
-      pro: { monthly: 2490, annual: 24900 },
-      scale: { monthly: 4990, annual: 49900 }
+      starter: { monthly: 87, annual: 870 },
+      pro: { monthly: 197, annual: 1970 },
+      scale: { monthly: 299, annual: 2990 }
     };
 
     function updatePlanUI() {
@@ -9924,16 +9924,16 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const perScale = document.getElementById('pricePeriodScale');
 
       if (cycle === 'annual') {
-        if (pStarter) pStarter.textContent = '9.900';
-        if (pPro) pPro.textContent = '24.900';
-        if (pScale) pScale.textContent = '49.900';
+        if (pStarter) pStarter.textContent = '870';
+        if (pPro) pPro.textContent = '1.970';
+        if (pScale) pScale.textContent = '2.990';
         if (perStarter) perStarter.textContent = '/ano';
         if (perPro) perPro.textContent = '/ano';
         if (perScale) perScale.textContent = '/ano';
       } else {
-        if (pStarter) pStarter.textContent = '990';
-        if (pPro) pPro.textContent = '2.490';
-        if (pScale) pScale.textContent = '4.990';
+        if (pStarter) pStarter.textContent = '87';
+        if (pPro) pPro.textContent = '197';
+        if (pScale) pScale.textContent = '299';
         if (perStarter) perStarter.textContent = '/mês';
         if (perPro) perPro.textContent = '/mês';
         if (perScale) perScale.textContent = '/mês';

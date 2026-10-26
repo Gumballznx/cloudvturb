@@ -819,6 +819,46 @@ function getVideoDurationFormatted(filePath) {
   return null;
 }
 
+function detectVideoAspectRatio(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const probe = execFileSync('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-of', 'json',
+      filePath
+    ], { timeout: 10000 });
+    const json = JSON.parse(probe.toString());
+    const vStream = (json.streams && json.streams[0]) || null;
+    if (!vStream || !vStream.width || !vStream.height) return null;
+    const w = parseInt(vStream.width, 10);
+    const h = parseInt(vStream.height, 10);
+    if (!w || !h) return null;
+    const ratio = w / h;
+    const targets = [
+      { id: '9:16', val: 9 / 16 },
+      { id: '3:4',  val: 3 / 4 },
+      { id: '4:5',  val: 4 / 5 },
+      { id: '1:1',  val: 1 },
+      { id: '4:3',  val: 4 / 3 },
+      { id: '16:9', val: 16 / 9 }
+    ];
+    let closest = targets[0];
+    let minDiff = Math.abs(ratio - targets[0].val);
+    for (let i = 1; i < targets.length; i++) {
+      const diff = Math.abs(ratio - targets[i].val);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = targets[i];
+      }
+    }
+    return closest.id;
+  } catch (e) {
+    return null;
+  }
+}
+
 const activeProcessingVids = new Set();
 
 function processVideoHLS(vidId) {
@@ -846,6 +886,16 @@ function processVideoHLS(vidId) {
       try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
       activeProcessingVids.delete(vidId);
       return;
+    }
+    const detectedAspect = detectVideoAspectRatio(inputPath);
+    if (detectedAspect) {
+      try {
+        let s = JSON.parse(v.settings_json || '{}');
+        if (!s.aspectRatio || s.aspectRatio === '16:9') {
+          s.aspectRatio = detectedAspect;
+          db.prepare('UPDATE videos SET settings_json = ? WHERE id = ?').run(JSON.stringify(s), vidId);
+        }
+      } catch (e) {}
     }
 
     const videoDir = path.join(VIDEOS_DIR, vidId);
@@ -1292,8 +1342,8 @@ function checkStorageQuotaPre(req, res, next) {
 app.get('/api/config', (req, res) => {
   const host = req.get('host') || '';
   const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
-  const playerDomain = (isProd && PLAYER_DOMAIN) ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
-  const dashDomain = (isProd && DASH_DOMAIN) ? `https://${DASH_DOMAIN}` : `${req.protocol}://${host}`;
+  const playerDomain = (isProd && PLAYER_DOMAIN) ? `https://${PLAYER_DOMAIN}` : (PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`);
+  const dashDomain = (isProd && DASH_DOMAIN) ? `https://${DASH_DOMAIN}` : (DASH_DOMAIN ? `https://${DASH_DOMAIN}` : `${req.protocol}://${host}`);
   const cleanHost = host.replace(/^(dash|player|api)\./i, '');
   const docsDomain = (isProd && DOCS_DOMAIN) ? `https://${DOCS_DOMAIN}` : (DOCS_DOMAIN ? `https://${DOCS_DOMAIN}` : `${req.protocol}://docs.${cleanHost}`);
   res.json({

@@ -1140,8 +1140,18 @@
           skel.classList.add('hidden');
         }
       }
-      video.addEventListener('playing', hideSkeletonAndPoster);
-      video.addEventListener('canplay', hideSkeletonOnly);
+      video.addEventListener('playing', function () {
+        hideSkeletonAndPoster();
+        if (window.parent) {
+          try { window.parent.postMessage({ type: 'vturb_player_playing', videoId: vidId }, '*'); } catch (e) {}
+        }
+      });
+      video.addEventListener('canplay', function () {
+        hideSkeletonOnly();
+        if (window.parent) {
+          try { window.parent.postMessage({ type: 'vturb_player_ready', videoId: vidId }, '*'); } catch (e) {}
+        }
+      });
       video.addEventListener('loadeddata', hideSkeletonOnly);
       video.addEventListener('loadedmetadata', hideSkeletonOnly);
       video.addEventListener('timeupdate', function () {

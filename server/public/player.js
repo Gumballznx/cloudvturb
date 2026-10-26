@@ -16,7 +16,9 @@
       if (!vidId) return;
 
       var placeholder = el.querySelector('.vturb-player-placeholder');
-      var isVertical = el.getAttribute('data-vertical') === 'true' || (placeholder && placeholder.style.padding && placeholder.style.padding.includes('177'));
+      var padStyle = (placeholder && placeholder.style.padding) ? placeholder.style.padding : '';
+      var hasVerticalPadding = padStyle.includes('177') || padStyle.includes('133') || padStyle.includes('125');
+      var isVertical = el.getAttribute('data-vertical') === 'true' || hasVerticalPadding;
       if (isVertical) {
         el.setAttribute('data-vertical', 'true');
         el.style.maxWidth = window.innerWidth <= 450 ? '100%' : '400px';
@@ -24,8 +26,17 @@
         el.style.display = 'block';
       }
 
+      function fadeAndRemoveThumbnail(target) {
+        var thumbs = (target || placeholder).querySelectorAll('.thumbnail-image');
+        thumbs.forEach(function(th) {
+          th.style.transition = 'opacity 0.25s ease';
+          th.style.opacity = '0';
+          setTimeout(function() { if (th && th.parentNode) th.remove(); }, 260);
+        });
+      }
+
       var posterUrl = el.getAttribute('data-poster') || (placeholder && placeholder.getAttribute('data-poster'));
-      if (placeholder && posterUrl && !placeholder.querySelector('.thumbnail-image')) {
+      if (placeholder && posterUrl && !placeholder.querySelector('.thumbnail-image') && !placeholder.querySelector('iframe')) {
         var img = document.createElement('img');
         img.className = 'thumbnail-image';
         img.src = posterUrl;
@@ -33,7 +44,14 @@
         placeholder.appendChild(img);
       }
 
-      if (placeholder && !placeholder.querySelector('iframe')) {
+      var existingIfr = placeholder ? placeholder.querySelector('iframe') : null;
+      if (existingIfr) {
+        existingIfr.addEventListener('load', function() {
+          setTimeout(function() { fadeAndRemoveThumbnail(placeholder); }, 400);
+        });
+      }
+
+      if (placeholder && !existingIfr) {
         var origin = el.getAttribute('data-host') || window.location.origin;
         var ifr = document.createElement('iframe');
         ifr.id = 'ifr_' + vidId;
@@ -44,6 +62,9 @@
         ifr.setAttribute('allow', 'autoplay; fullscreen');
         ifr.setAttribute('loading', 'lazy');
         ifr.setAttribute('allowfullscreen', 'true');
+        ifr.addEventListener('load', function() {
+          setTimeout(function() { fadeAndRemoveThumbnail(placeholder); }, 400);
+        });
         placeholder.appendChild(ifr);
       }
     });
@@ -75,6 +96,12 @@
 
   window.addEventListener('message', function(event) {
     if (!event.data || typeof event.data !== 'object') return;
+    if (event.data.type === 'vturb_player_ready' || event.data.type === 'vturb_player_playing' || event.data.source === 'cloudvturb_player') {
+      var allThumbs = document.querySelectorAll('.thumbnail-image');
+      allThumbs.forEach(function(th) {
+        if (th && th.parentNode) th.remove();
+      });
+    }
     if (event.data.type === 'vturb_pitch_revealed' || event.data.type === 'vturb_cta_show') {
       var pitchElements = document.querySelectorAll('.vturb-pitch, [data-vturb-pitch], .delay, [data-delay], .esconder, [data-esconder]');
       pitchElements.forEach(function(p) {

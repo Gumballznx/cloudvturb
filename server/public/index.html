@@ -5926,6 +5926,10 @@
               <label class="form-label">Proporção do Player</label>
               <select id="edAspectRatio" class="form-select-dark" onchange="onAspectRatioChange(this.value)">
                 <option value="16:9" selected>Horizontal (16:9)</option>
+                <option value="4:3">Horizontal (4:3)</option>
+                <option value="1:1">Quadrado (1:1)</option>
+                <option value="4:5">Vertical (4:5)</option>
+                <option value="3:4">Vertical (3:4)</option>
                 <option value="9:16">Vertical / Reels / TikTok (9:16)</option>
               </select>
             </div>
@@ -15889,15 +15893,25 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('cloudvturb_theme') || 'light';
       const playerSrc = `/player?id=${encodeURIComponent(v.id)}&preview=1&theme=${encodeURIComponent(currentTheme)}${tokenPart}`;
 
-      const isVertical = v.settings && v.settings.aspectRatio === '9:16';
+      const vAspect = (v.settings && v.settings.aspectRatio) || '16:9';
+      const isVertical = ['9:16', '3:4', '4:5'].includes(vAspect);
+      const ASPECT_PAD_MAP = {
+        '16:9': '56.25%',
+        '4:3': '75%',
+        '1:1': '100%',
+        '4:5': '125%',
+        '3:4': '133.33333333333331%',
+        '9:16': '177.77%'
+      };
       const wrapper = document.getElementById('detailsPreviewWrapper');
       const deskCanvas = document.getElementById('vturbDetailsDesktopCanvas');
       if (wrapper && deskCanvas) {
+        wrapper.style.paddingTop = ASPECT_PAD_MAP[vAspect] || '56.25%';
         if (isVertical) {
-          wrapper.style.paddingTop = '177.77%';
-          deskCanvas.style.maxWidth = '380px';
+          deskCanvas.style.maxWidth = '400px';
+        } else if (vAspect === '1:1') {
+          deskCanvas.style.maxWidth = '520px';
         } else {
-          wrapper.style.paddingTop = '56.25%';
           deskCanvas.style.maxWidth = '820px';
         }
       }
@@ -16210,11 +16224,13 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function onAspectRatioChange(ratio) {
       const wrapper = document.getElementById('previewWrapper');
       if (!wrapper) return;
-      if (ratio === '9:16') {
-        wrapper.style.aspectRatio = '9 / 16';
-        wrapper.style.maxWidth = '320px';
+      const [w, h] = (ratio || '16:9').split(':').map(Number);
+      if (w && h) wrapper.style.aspectRatio = `${w} / ${h}`;
+      if (['9:16', '3:4', '4:5'].includes(ratio)) {
+        wrapper.style.maxWidth = '380px';
+      } else if (ratio === '1:1') {
+        wrapper.style.maxWidth = '500px';
       } else {
-        wrapper.style.aspectRatio = '16 / 9';
         wrapper.style.maxWidth = '720px';
       }
       liveUpdateSettings();
@@ -16505,7 +16521,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (!currentEditingVideoId) return;
       const v = videos.find(x => x.id === currentEditingVideoId);
       if (!v) return;
-      const playerHost = appConfig.playerDomain || window.location.origin;
+      const playerHost = (appConfig && appConfig.playerDomain) ? appConfig.playerDomain : (window.location.host.includes('cloudvturb.online') ? 'https://player.cloudvturb.online' : window.location.origin);
       const tok = token || localStorage.getItem('cloudvturb_token') || '';
       const tokenPart = tok ? `&token=${encodeURIComponent(tok)}` : '';
       window.open(`${playerHost}/player?id=${encodeURIComponent(v.id)}${tokenPart}`, '_blank');
@@ -16588,7 +16604,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       const v = videos.find(x => x.id === currentEditingVideoId) || (topVideos && topVideos.find(x => x.id === currentEditingVideoId));
       if (!v) return;
 
-      const playerHost = appConfig.playerDomain || window.location.origin;
+      const playerHost = (appConfig && appConfig.playerDomain) ? appConfig.playerDomain : (window.location.host.includes('cloudvturb.online') ? 'https://player.cloudvturb.online' : window.location.origin);
       const posterUrl = v.poster_url || `${playerHost}/videos/${encodeURIComponent(v.id)}/poster.jpg`;
       const fullUrl = `${playerHost}/player?id=${encodeURIComponent(v.id)}&poster=${encodeURIComponent(posterUrl)}`;
 
@@ -16597,14 +16613,26 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         vSettings = typeof v.settings === 'object' && v.settings ? v.settings : JSON.parse(v.settings_json || v.settings || '{}');
       } catch (e) {}
 
-      const isVertical = (document.getElementById('edAspectRatio') && document.getElementById('edAspectRatio').value === '9:16') || vSettings.aspectRatio === '9:16';
-      const padding = isVertical ? '177.77%' : '56.25%';
+      const RATIO_PAD_MAP = {
+        '16:9': { padding: '56.25%', isVertical: false },
+        '4:3':  { padding: '75%', isVertical: false },
+        '1:1':  { padding: '100%', isVertical: false },
+        '4:5':  { padding: '125%', isVertical: true },
+        '3:4':  { padding: '133.33333333333331%', isVertical: true },
+        '9:16': { padding: '177.77%', isVertical: true }
+      };
+
+      const selectedRatio = (document.getElementById('edAspectRatio') && document.getElementById('edAspectRatio').value) || vSettings.aspectRatio || '16:9';
+      const ratioInfo = RATIO_PAD_MAP[selectedRatio] || RATIO_PAD_MAP['16:9'];
+      const isVertical = ratioInfo.isVertical;
+      const padding = ratioInfo.padding;
 
       const isResponsive = document.getElementById('embedResponsiveSwitch') && document.getElementById('embedResponsiveSwitch').checked;
       let mobileV = v;
       let mobilePadding = padding;
       let mobilePosterUrl = posterUrl;
       let mobileFullUrl = fullUrl;
+      let mobileIsVertical = isVertical;
 
       if (isResponsive) {
         const mobileSelect = document.getElementById('embedMobileVideoSelect');
@@ -16617,15 +16645,17 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           try {
             mSettings = typeof mobileV.settings === 'object' && mobileV.settings ? mobileV.settings : JSON.parse(mobileV.settings_json || mobileV.settings || '{}');
           } catch (e) {}
-          const mIsVertical = mSettings.aspectRatio === '9:16';
-          mobilePadding = mIsVertical ? '177.77%' : '56.25%';
+          const mRatio = mSettings.aspectRatio || '16:9';
+          const mInfo = RATIO_PAD_MAP[mRatio] || RATIO_PAD_MAP['16:9'];
+          mobilePadding = mInfo.padding;
+          mobileIsVertical = mInfo.isVertical;
         }
       }
 
       let snippet = '';
       if (currentEmbedSnippetTab === 'js') {
         const desktopMaxW = isVertical ? ' max-width: 400px;' : '';
-        const mobileMaxW = mobilePadding === '177.77%' ? ' max-width: 400px;' : '';
+        const mobileMaxW = mobileIsVertical ? ' max-width: 400px;' : '';
         if (!isResponsive) {
           snippet = `<vturb-smartplayer id="vid-${v.id}" data-vertical="${isVertical}" data-poster="${posterUrl}" style="display: block; margin: 0 auto; width: 100%;${desktopMaxW}"><div class="vturb-player-placeholder" style="position: relative; width: 100%; padding: ${padding} 0 0; z-index: 0; background: #000 url('${posterUrl}') center/cover no-repeat;"><iframe id="ifr_${v.id}" src="${fullUrl}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" allow="autoplay; fullscreen" loading="lazy"></iframe></div></vturb-smartplayer><script type="text/javascript"> var s=document.createElement("script"); s.src="${playerHost}/player.js"; s.async=!0; document.head.appendChild(s); <\/script>`;
         } else {

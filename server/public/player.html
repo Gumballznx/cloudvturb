@@ -1742,7 +1742,6 @@
       }
 
       const primaryStream = hlsSrc || videoSrc;
-      const shouldUseTeaser = !isPreview && !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hlsSrc && !hasUserUnmuted;
 
       if (hasSavedResume && !isPreview) {
         if (primaryStream) {
@@ -1753,16 +1752,6 @@
             video.currentTime = savedResumeTime;
             video.pause();
           }
-        }
-      } else if (shouldUseTeaser) {
-        video.src = smartAutoplaySrc;
-        video.loop = true;
-        video.muted = true;
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-          playPromise.then(function () {
-            registerPlay();
-          }).catch(function () {});
         }
       } else if (primaryStream) {
         if (primaryStream.includes('.m3u8')) {

@@ -921,7 +921,8 @@ function processVideoHLS(vidId, force = false) {
         if (fs.existsSync(oldPl)) fs.unlinkSync(oldPl);
       } catch (e) {}
     }
-    if (!force && fs.existsSync(masterPlaylistPath)) {
+    const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
+    if (!force && fs.existsSync(masterPlaylistPath) && isMultiRendition) {
       const manifestUrl = `/videos/${vidId}/main.m3u8`;
       try {
         db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
@@ -1131,13 +1132,14 @@ function autoCheckPendingHls() {
     for (const v of allVids) {
       const videoDir = path.join(VIDEOS_DIR, v.id);
       const masterPlaylist = path.join(videoDir, 'main.m3u8');
-      if (fs.existsSync(masterPlaylist)) {
+      const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
+      if (fs.existsSync(masterPlaylist) && isMultiRendition) {
         if (!v.hls_ready || v.status === 'optimizing') {
           const manifestUrl = `/videos/${v.id}/main.m3u8`;
           db.prepare("UPDATE videos SET status = 'ready', hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
         }
-      } else if (v.status === 'optimizing') {
-        processVideoHLS(v.id);
+      } else if (v.status === 'optimizing' || !isMultiRendition) {
+        processVideoHLS(v.id, !isMultiRendition);
       }
 
       const posterPath = path.join(videoDir, 'poster.jpg');
@@ -4591,7 +4593,8 @@ app.get('/api/videos/:id/public', (req, res) => {
     if (!v.hls_ready) {
       const videoDir = path.join(VIDEOS_DIR, vidId);
       const masterPlaylist = path.join(videoDir, 'main.m3u8');
-      if (fs.existsSync(masterPlaylist)) {
+      const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
+      if (fs.existsSync(masterPlaylist) && isMultiRendition) {
         const manifestUrl = `/videos/${vidId}/main.m3u8`;
         try {
           db.prepare('UPDATE videos SET hls_ready = 1, hls_manifest = ? WHERE id = ?').run(manifestUrl, vidId);
@@ -5913,6 +5916,13 @@ app.get('/videos/:id/:file', (req, res) => {
   const vidId = path.basename(req.params.id);
   const fileName = path.basename(req.params.file);
   const filePath = path.join(VIDEOS_DIR, vidId, fileName);
+
+  if (fileName === 'main.m3u8') {
+    const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
+    if (!isMultiRendition) {
+      processVideoHLS(vidId, true);
+    }
+  }
 
   if (!fs.existsSync(filePath) && (fileName === 'poster.jpg' || fileName === 'thumbnail.jpg')) {
     try {

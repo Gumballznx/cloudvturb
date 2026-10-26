@@ -1051,7 +1051,7 @@ function processVideoHLS(vidId, force = false) {
     const hlsArgs = [
       '-y',
       '-i', inputPath,
-      '-filter_complex', `[0:v]split=3[v0][v1][v2];[v0]scale=w=${w0}:h=${h0}[v0out];[v1]scale=w=${w1}:h=${h1}[v1out];[v2]scale=w=${w2}:h=${h2}[v2out]`,
+      '-filter_complex', `[0:v]split=3[v0][v1][v2];[v0]scale=${w0}:${h0}[v0out];[v1]scale=${w1}:${h1}[v1out];[v2]scale=${w2}:${h2}[v2out]`,
       '-map', '[v0out]',
       '-c:v:0', 'libx264',
       '-preset', 'ultrafast',

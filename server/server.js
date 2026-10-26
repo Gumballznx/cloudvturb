@@ -6008,6 +6008,31 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
+try {
+  const existingVids = db.prepare("SELECT id, file_path, video_url, settings_json FROM videos WHERE status = 'ready'").all();
+  existingVids.forEach(v => {
+    let s = {};
+    try { s = JSON.parse(v.settings_json || '{}'); } catch (e) {}
+    if (!s.aspectRatio || s.aspectRatio === '16:9') {
+      let inputPath = v.file_path;
+      if (!inputPath || !fs.existsSync(inputPath)) {
+        if (v.video_url) {
+          const candidate = path.join(VIDEOS_DIR, path.basename(v.video_url));
+          if (fs.existsSync(candidate)) inputPath = candidate;
+        }
+      }
+      if (inputPath && fs.existsSync(inputPath)) {
+        const detected = detectVideoAspectRatio(inputPath);
+        if (detected && detected !== s.aspectRatio) {
+          s.aspectRatio = detected;
+          db.prepare("UPDATE videos SET settings_json = ? WHERE id = ?").run(JSON.stringify(s), v.id);
+          console.log(`Auto-detected aspect ratio for video ${v.id}: ${detected}`);
+        }
+      }
+    }
+  });
+} catch (e) {}
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} ativo na porta ${PORT}`);
 });

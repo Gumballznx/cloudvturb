@@ -881,16 +881,33 @@ function processVideoHLS(vidId, force = false) {
     }
 
     let inputPath = v.file_path;
+    const baseName = v.video_url ? path.basename(v.video_url) : '';
     if (!inputPath || !fs.existsSync(inputPath)) {
-      if (v.video_url) {
-        const candidate = path.join(VIDEOS_DIR, path.basename(v.video_url));
-        if (fs.existsSync(candidate)) {
-          inputPath = candidate;
-          try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(inputPath, vidId); } catch (e) {}
-        }
+      if (baseName) {
+        const c1 = path.join(VIDEOS_DIR, baseName);
+        const c2 = path.join(VIDEOS_DIR, vidId, baseName);
+        if (fs.existsSync(c1)) inputPath = c1;
+        else if (fs.existsSync(c2)) inputPath = c2;
       }
     }
     if (!inputPath || !fs.existsSync(inputPath)) {
+      const vidFolder = path.join(VIDEOS_DIR, vidId);
+      if (fs.existsSync(vidFolder)) {
+        const files = fs.readdirSync(vidFolder);
+        const mp4 = files.find(f => f.endsWith('.mp4') && !f.includes('smartautoplay'));
+        if (mp4) inputPath = path.join(vidFolder, mp4);
+      }
+    }
+    if (!inputPath || !fs.existsSync(inputPath)) {
+      if (fs.existsSync(VIDEOS_DIR)) {
+        const rootFiles = fs.readdirSync(VIDEOS_DIR);
+        const rootMp4 = rootFiles.find(f => f.includes(vidId) && f.endsWith('.mp4'));
+        if (rootMp4) inputPath = path.join(VIDEOS_DIR, rootMp4);
+      }
+    }
+    if (inputPath && fs.existsSync(inputPath)) {
+      try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(inputPath, vidId); } catch (e) {}
+    } else {
       try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
       activeProcessingVids.delete(vidId);
       return;
@@ -910,17 +927,6 @@ function processVideoHLS(vidId, force = false) {
     if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
 
     const masterPlaylistPath = path.join(videoDir, 'main.m3u8');
-    if (force) {
-      try {
-        if (fs.existsSync(masterPlaylistPath)) fs.unlinkSync(masterPlaylistPath);
-        for (let i = 0; i <= 2; i++) {
-          const vPl = path.join(videoDir, `video_${i}.m3u8`);
-          if (fs.existsSync(vPl)) fs.unlinkSync(vPl);
-        }
-        const oldPl = path.join(videoDir, 'video.m3u8');
-        if (fs.existsSync(oldPl)) fs.unlinkSync(oldPl);
-      } catch (e) {}
-    }
     const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
     if (!force && fs.existsSync(masterPlaylistPath) && isMultiRendition) {
       const manifestUrl = `/videos/${vidId}/main.m3u8`;
@@ -5919,8 +5925,20 @@ app.get('/videos/:id/:file', (req, res) => {
 
   if (fileName === 'main.m3u8') {
     const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
-    if (!isMultiRendition) {
+    if (!isMultiRendition && !activeProcessingVids.has(vidId)) {
       processVideoHLS(vidId, true);
+    }
+    if (!fs.existsSync(filePath)) {
+      const videoDir = path.join(VIDEOS_DIR, vidId);
+      const v0 = path.join(videoDir, 'video_0.m3u8');
+      const vOld = path.join(videoDir, 'video.m3u8');
+      if (fs.existsSync(v0)) {
+        const content = '#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nvideo_0.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1800000,RESOLUTION=1280x720\nvideo_1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=3200000,RESOLUTION=1920x1080\nvideo_2.m3u8\n';
+        try { fs.writeFileSync(filePath, content); } catch (_) {}
+      } else if (fs.existsSync(vOld)) {
+        const content = '#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-STREAM-INF:BANDWIDTH=1358633,AVERAGE-BANDWIDTH=821329,RESOLUTION=540x720\nvideo.m3u8\n';
+        try { fs.writeFileSync(filePath, content); } catch (_) {}
+      }
     }
   }
 

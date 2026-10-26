@@ -4669,8 +4669,11 @@ app.get('/api/videos/:id/public', (req, res) => {
     }
 
     let hlsUrl = null;
-    if (v.hls_ready && v.hls_manifest) {
+    const diskManifest = path.join(VIDEOS_DIR, vidId, 'main.m3u8');
+    if (v.hls_ready && v.hls_manifest && fs.existsSync(diskManifest)) {
       hlsUrl = `${origin}${v.hls_manifest}`;
+    } else if (!activeProcessingVids.has(vidId)) {
+      processVideoHLS(vidId, true);
     }
 
     let smartautoplayUrl = null;
@@ -6169,4 +6172,7 @@ try {
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} ativo na porta ${PORT}`);
+  setTimeout(() => {
+    try { autoCheckPendingHls(); } catch (_) {}
+  }, 1000);
 });

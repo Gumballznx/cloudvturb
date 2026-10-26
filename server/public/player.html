@@ -1134,6 +1134,7 @@
       let hasUserUnmuted = false;
       let playRegistered = false;
       let pitchFired = false;
+      let inResume = Boolean(hasSavedResume);
 
       function applyAudioNoticeSettings(cfg) {
         if (!smartOverlay || !pulseBadge || !pulseIcon || (!overlayTextTop && !overlayText)) return;
@@ -1396,6 +1397,7 @@
       }
 
       function resumeAndPlay(targetTime) {
+        inResume = false;
         if (resumeModal) resumeModal.classList.remove('active');
         hasUserUnmuted = true;
         if (smartOverlay) smartOverlay.classList.add('hidden');
@@ -1862,6 +1864,7 @@
       const milestonesFired = new Set();
 
       video.addEventListener('timeupdate', function () {
+        if (inResume) return;
         const cur = video.currentTime;
         const dur = video.duration || 1;
 
@@ -1984,6 +1987,7 @@
       if (resumeEnabled && hasSavedResume) {
         video.addEventListener('loadedmetadata', function () {
           if (video.duration && savedResumeTime >= video.duration - 5) {
+            inResume = false;
             try { localStorage.removeItem(storageKey); } catch (err) {}
             if (resumeModal) resumeModal.classList.remove('active');
             if (smartAutoplay && !hasUserUnmuted) {

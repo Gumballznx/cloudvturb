@@ -7,6 +7,44 @@
   if (window.__cloudvturb_sdk_loaded) return;
   window.__cloudvturb_sdk_loaded = true;
 
+  if (!document.querySelector('link[href*="vturb"]')) {
+    try {
+      var lk = document.createElement('link');
+      lk.rel = 'dns-prefetch';
+      lk.href = 'https://api.vturb.com.br';
+      document.head.appendChild(lk);
+    } catch (_) {}
+  }
+
+  function guardIframeReload(ifr) {
+    if (!ifr || ifr.__guarded) return;
+    ifr.__guarded = true;
+    ifr.classList.add('utmify-ignore');
+    var currentSrc = ifr.src;
+    try {
+      Object.defineProperty(ifr, 'src', {
+        get: function() { return currentSrc; },
+        set: function(newSrc) {
+          if (!newSrc || newSrc === currentSrc) return;
+          try {
+            var oldUrl = new URL(currentSrc, window.location.href);
+            var freshUrl = new URL(newSrc, window.location.href);
+            if (oldUrl.origin === freshUrl.origin && oldUrl.pathname === freshUrl.pathname) {
+              currentSrc = newSrc;
+              if (ifr.contentWindow) {
+                ifr.contentWindow.postMessage({ type: 'UPDATE_UTMS', url: newSrc }, '*');
+              }
+              return;
+            }
+          } catch (_) {}
+          currentSrc = newSrc;
+          ifr.setAttribute('src', newSrc);
+        },
+        configurable: true
+      });
+    } catch (_) {}
+  }
+
   function initPlayers() {
     var smartElements = document.querySelectorAll('vturb-smartplayer:not([data-initialized])');
     smartElements.forEach(function(el) {
@@ -46,6 +84,7 @@
 
       var existingIfr = placeholder ? placeholder.querySelector('iframe') : null;
       if (existingIfr) {
+        guardIframeReload(existingIfr);
         existingIfr.addEventListener('load', function() {
           setTimeout(function() { fadeAndRemoveThumbnail(placeholder); }, 400);
         });
@@ -55,9 +94,20 @@
         var origin = el.getAttribute('data-host') || window.location.origin;
         var ifr = document.createElement('iframe');
         ifr.id = 'ifr_' + vidId;
+        ifr.className = 'utmify-ignore';
         var ifrSrc = origin + '/player?id=' + encodeURIComponent(vidId);
         if (posterUrl) ifrSrc += '&poster=' + encodeURIComponent(posterUrl);
+        var pageSearch = window.location.search;
+        if (pageSearch && pageSearch.length > 1) {
+          var pParams = new URLSearchParams(pageSearch);
+          pParams.forEach(function(val, key) {
+            if (!ifrSrc.includes(key + '=')) {
+              ifrSrc += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(val);
+            }
+          });
+        }
         ifr.src = ifrSrc;
+        guardIframeReload(ifr);
         ifr.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
         ifr.setAttribute('allow', 'autoplay; fullscreen');
         ifr.setAttribute('allowfullscreen', 'true');

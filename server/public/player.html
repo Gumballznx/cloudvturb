@@ -1499,6 +1499,15 @@
             hasUserUnmuted = false;
             smartOverlay.classList.remove('hidden');
           }
+        } else if (e.data.type === 'UPDATE_UTMS') {
+          try {
+            const u = new URL(e.data.url, window.location.href);
+            u.searchParams.forEach((val, key) => {
+              if (key.startsWith('utm_') || key.startsWith('fbclid') || key.startsWith('ttclid')) {
+                trackingCtx[key] = val;
+              }
+            });
+          } catch (_) {}
         } else if (e.data.type === 'STOP' || e.data.type === 'PAUSE') {
           if (video) {
             try {
@@ -1592,7 +1601,6 @@
       let hlsInstance = null;
 
       function loadHlsStream(streamUrl, startTime, autoplayAudio, startPaused) {
-        console.log('[DEBUG_HLS_LOAD]', JSON.stringify({ streamUrl, startTime, autoplayAudio, startPaused }), new Error().stack);
         if (hlsInstance) {
           try { hlsInstance.destroy(); } catch (e) {}
           hlsInstance = null;
@@ -1791,7 +1799,6 @@
 
       let isUnmuting = false;
       function unmuteAndRestart() {
-        console.log('[DEBUG_UNMUTE]', JSON.stringify({ hasUserUnmuted, isUnmuting, hasHls: !!hlsInstance, curSrc: video ? video.currentSrc : null }), new Error().stack);
         if (hasUserUnmuted) return;
         hasUserUnmuted = true;
         isUnmuting = true;

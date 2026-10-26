@@ -4543,6 +4543,33 @@ app.get('/api/videos/:id/public', (req, res) => {
       return res.status(403).json({ error: 'Vídeo bloqueado pela moderação.', blocked: true, reason: v.blocked_reason });
     }
 
+    const originDomain = String(req.query.domain || req.get('referer') || '').trim().toLowerCase().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+    if (originDomain && !isOwnerPreview) {
+      const user = db.prepare('SELECT id, owner_id FROM users WHERE id = ?').get(v.user_id);
+      const ownerId = (user && user.owner_id) || v.user_id;
+      const domains = db.prepare('SELECT id, domain FROM allowed_domains WHERE user_id = ?').all(ownerId);
+      if (domains && domains.length > 0) {
+        let matched = false;
+        for (const d of domains) {
+          const pattern = d.domain.toLowerCase();
+          if (pattern === originDomain) {
+            matched = true;
+            break;
+          }
+          if (pattern.startsWith('*.')) {
+            const root = pattern.slice(2);
+            if (originDomain === root || originDomain.endsWith('.' + root)) {
+              matched = true;
+              break;
+            }
+          }
+        }
+        if (!matched) {
+          return res.status(403).json({ error: 'Execução restrita aos domínios autorizados.', domain_blocked: true });
+        }
+      }
+    }
+
     let settings = {};
     try { settings = JSON.parse(v.settings_json || '{}'); } catch (e) {}
 

@@ -914,15 +914,40 @@
         utm_term: params.get('utm_term') || null,
       };
 
+      let originDomain = '';
+      try {
+        if (window.self !== window.top && document.referrer) {
+          originDomain = new URL(document.referrer).hostname;
+        } else {
+          originDomain = window.location.hostname;
+        }
+      } catch (e) {
+        originDomain = window.location.hostname;
+      }
+
       if (vidId) {
         try {
-          const fetchUrl = `/api/videos/${encodeURIComponent(vidId)}/public${tokenParam ? '?token=' + encodeURIComponent(tokenParam) : ''}`;
+          const fetchUrl = `/api/videos/${encodeURIComponent(vidId)}/public?domain=${encodeURIComponent(originDomain)}${tokenParam ? '&token=' + encodeURIComponent(tokenParam) : ''}`;
           const res = await fetch(fetchUrl);
           if (res.status === 403) {
-            const blockedData = await res.json().catch(() => ({}));
-            if (blockedData && blockedData.blocked) {
-              const wrap = document.getElementById('playerWrapper');
-              if (wrap) {
+            const errData = await res.json().catch(() => ({}));
+            const wrap = document.getElementById('playerWrapper');
+            if (wrap) {
+              if (errData && errData.domain_blocked) {
+                wrap.innerHTML = `
+                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;background:#0f172a;color:#fff;">
+                    <div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                      </svg>
+                    </div>
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:#fff;">Reprodução Não Autorizada</h3>
+                    <p style="font-size:13px;color:#94a3b8;max-width:380px;line-height:1.5;margin:0;">Este vídeo possui proteção de domínio e não tem permissão para ser reproduzido nesta página.</p>
+                  </div>
+                `;
+              } else {
                 wrap.innerHTML = `
                   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;background:#0f172a;color:#fff;">
                     <div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
@@ -936,8 +961,8 @@
                   </div>
                 `;
               }
-              return;
             }
+            return;
           }
           if (res.ok) {
             const data = await res.json();
@@ -956,45 +981,6 @@
             }
             if (isPreview) {
               document.documentElement.classList.add('is-ready');
-            }
-          }
-        } catch (e) {}
-      }
-
-      if (vidId && !isPreview) {
-        let originDomain = '';
-        try {
-          if (window.self !== window.top && document.referrer) {
-            originDomain = new URL(document.referrer).hostname;
-          } else {
-            originDomain = window.location.hostname;
-          }
-        } catch (e) {
-          originDomain = window.location.hostname;
-        }
-
-        try {
-          const chkRes = await fetch(`/api/security/check-domain?video_id=${encodeURIComponent(vidId)}&domain=${encodeURIComponent(originDomain)}`);
-          if (chkRes.ok) {
-            const chkData = await chkRes.json();
-            if (chkData && chkData.allowed === false) {
-              const wrap = document.getElementById('playerWrapper');
-              if (wrap) {
-                wrap.innerHTML = `
-                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;background:#0f172a;color:#fff;">
-                    <div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                      </svg>
-                    </div>
-                    <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:#fff;">Reprodução Não Autorizada</h3>
-                    <p style="font-size:13px;color:#94a3b8;max-width:380px;line-height:1.5;margin:0;">Este vídeo possui proteção de domínio e não tem permissão para ser reproduzido nesta página.</p>
-                  </div>
-                `;
-              }
-              return;
             }
           }
         } catch (e) {}
@@ -1643,7 +1629,7 @@
               video.pause();
               return;
             }
-            if (autoplayAudio) {
+            if (hasUserUnmuted || autoplayAudio) {
               video.muted = false;
               video.volume = 1;
             } else {
@@ -1814,7 +1800,7 @@
         if (thumbSniperBadge) thumbSniperBadge.classList.add('hidden');
         video.loop = Boolean(videoLoop);
 
-        if (hlsInstance && hlsInstance.media === video) {
+        if (hlsInstance) {
           video.muted = false;
           video.volume = 1;
           if (video.currentTime > 2) {
@@ -1825,26 +1811,23 @@
           return;
         }
 
-        const cur = video.currentTime || 0;
-        const targetTime = cur > 2 ? 0 : cur;
+        if (video.currentSrc || video.src) {
+          video.muted = false;
+          video.volume = 1;
+          if (video.currentTime > 2) {
+            video.currentTime = 0;
+          }
+          const p = video.play();
+          if (p !== undefined) p.catch(function () {});
+          return;
+        }
 
         if (hlsSrc) {
-          loadHlsStream(hlsSrc, targetTime, true);
+          loadHlsStream(hlsSrc, 0, true, false);
         } else if (videoSrc) {
-          if (video.src !== videoSrc) {
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
-            video.src = videoSrc;
-            if (targetTime > 0) video.currentTime = targetTime;
-          }
+          video.src = videoSrc;
           video.muted = false;
           video.volume = 1;
-          video.play().catch(function () {});
-        } else {
-          video.muted = false;
-          video.volume = 1;
-          if (targetTime === 0) video.currentTime = 0;
           video.play().catch(function () {});
         }
       }

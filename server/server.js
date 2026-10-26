@@ -1293,6 +1293,7 @@ app.get('/api/config', (req, res) => {
   const host = req.get('host') || '';
   const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
   const playerDomain = (isProd && PLAYER_DOMAIN) ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
+  const dashDomain = (isProd && DASH_DOMAIN) ? `https://${DASH_DOMAIN}` : `${req.protocol}://${host}`;
   const cleanHost = host.replace(/^(dash|player|api)\./i, '');
   const docsDomain = (isProd && DOCS_DOMAIN) ? `https://${DOCS_DOMAIN}` : (DOCS_DOMAIN ? `https://${DOCS_DOMAIN}` : `${req.protocol}://docs.${cleanHost}`);
   res.json({

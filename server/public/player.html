@@ -1133,6 +1133,7 @@
 
       let hasUserUnmuted = false;
       let playRegistered = false;
+      let pitchFired = false;
 
       function applyAudioNoticeSettings(cfg) {
         if (!smartOverlay || !pulseBadge || !pulseIcon || (!overlayTextTop && !overlayText)) return;
@@ -1527,6 +1528,8 @@
       if (ctaPosition === 'inside') {
         ctaContainer.classList.add('position-inside');
         playerWrapper.appendChild(ctaContainer);
+      } else if (window.self !== window.top && !isPreview) {
+        ctaContainer.style.display = 'none';
       }
       if (ctaAnimation === 'none') {
         ctaBtn.style.animation = 'none';
@@ -1893,8 +1896,8 @@
         }
 
         if (ctaEnabled && ctaTime > 0 && cur >= ctaTime) {
-          if (!ctaContainer.classList.contains('visible')) {
-            ctaContainer.classList.add('visible');
+          if (!pitchFired) {
+            pitchFired = true;
             emitAnalyticsEvent('pitch_viewed', null, cur);
             emitAnalyticsEvent('cta_shown', null, cur);
             if (pixelsEnabled && !pixelFired.pitch) {
@@ -1916,6 +1919,11 @@
                   }
                 }, '*');
               } catch (e) {}
+            }
+            const isInside = ctaPosition === 'inside';
+            const isStandalone = window.self === window.top || isPreview;
+            if (isInside || isStandalone) {
+              ctaContainer.classList.add('visible');
             }
           }
         }

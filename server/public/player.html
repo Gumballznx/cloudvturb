@@ -1592,6 +1592,7 @@
       let hlsInstance = null;
 
       function loadHlsStream(streamUrl, startTime, autoplayAudio, startPaused) {
+        console.log('[DEBUG_HLS_LOAD]', JSON.stringify({ streamUrl, startTime, autoplayAudio, startPaused }), new Error().stack);
         if (hlsInstance) {
           try { hlsInstance.destroy(); } catch (e) {}
           hlsInstance = null;
@@ -1790,6 +1791,7 @@
 
       let isUnmuting = false;
       function unmuteAndRestart() {
+        console.log('[DEBUG_UNMUTE]', JSON.stringify({ hasUserUnmuted, isUnmuting, hasHls: !!hlsInstance, curSrc: video ? video.currentSrc : null }), new Error().stack);
         if (hasUserUnmuted) return;
         hasUserUnmuted = true;
         isUnmuting = true;

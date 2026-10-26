@@ -1611,10 +1611,18 @@
           hlsInstance = null;
         }
 
+        if (video.src) {
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch (e) {}
+        }
+
         if (window.Hls && window.Hls.isSupported()) {
           const hlsBufLen = turboEnabled ? 30 : 8;
           const hlsMaxBufLen = turboEnabled ? 60 : 15;
-          hlsInstance = new window.Hls({
+          const hlsConfig = {
             enableWorker: true,
             lowLatencyMode: !turboEnabled,
             startLevel: 0,
@@ -1622,11 +1630,15 @@
             maxBufferLength: hlsBufLen,
             maxMaxBufferLength: hlsMaxBufLen,
             backBufferLength: turboEnabled ? 30 : 10
-          });
+          };
+          if (startTime > 0) {
+            hlsConfig.startPosition = startTime;
+          }
+          hlsInstance = new window.Hls(hlsConfig);
           hlsInstance.loadSource(streamUrl);
           hlsInstance.attachMedia(video);
           hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, function () {
-            if (startTime > 0) video.currentTime = startTime;
+            if (startTime > 0 && !hlsConfig.startPosition) video.currentTime = startTime;
             if (startPaused) {
               video.pause();
               return;
@@ -1698,9 +1710,6 @@
             }).catch(function () {
               video.muted = true;
               video.play().catch(function () {});
-              if (smartOverlay && !hasUserUnmuted && !hasSavedResume) {
-                smartOverlay.classList.remove('hidden');
-              }
             });
           }
         }
@@ -1751,7 +1760,7 @@
       }
 
       const primaryStream = hlsSrc || videoSrc;
-      const shouldUseTeaser = !isPreview && !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hasUserUnmuted;
+      const shouldUseTeaser = !isPreview && !hasSavedResume && smartAutoplay && smartAutoplaySrc && !hlsSrc && !hasUserUnmuted;
 
       if (hasSavedResume && !isPreview) {
         if (primaryStream) {
@@ -1764,9 +1773,6 @@
           }
         }
       } else if (shouldUseTeaser) {
-        if (hlsSrc) {
-          fetch(hlsSrc, { mode: 'cors' }).catch(function () {});
-        }
         video.src = smartAutoplaySrc;
         video.loop = true;
         video.muted = true;
@@ -1796,22 +1802,42 @@
         }
       }
 
-      smartOverlay.addEventListener('click', unmuteAndRestart);
-
+      let isUnmuting = false;
       function unmuteAndRestart() {
+        if (hasUserUnmuted) return;
         hasUserUnmuted = true;
+        isUnmuting = true;
+        setTimeout(function () { isUnmuting = false; }, 800);
+
+        hideSkeletonAndPoster();
         smartOverlay.classList.add('hidden');
         if (thumbSniperBadge) thumbSniperBadge.classList.add('hidden');
         video.loop = Boolean(videoLoop);
+
+        if (hlsInstance && hlsInstance.media === video) {
+          video.muted = false;
+          video.volume = 1;
+          if (video.currentTime > 2) {
+            video.currentTime = 0;
+          }
+          const p = video.play();
+          if (p !== undefined) p.catch(function () {});
+          return;
+        }
 
         const cur = video.currentTime || 0;
         const targetTime = cur > 2 ? 0 : cur;
 
         if (hlsSrc) {
           loadHlsStream(hlsSrc, targetTime, true);
-        } else if (videoSrc && video.src !== videoSrc) {
-          video.src = videoSrc;
-          video.currentTime = targetTime;
+        } else if (videoSrc) {
+          if (video.src !== videoSrc) {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+            video.src = videoSrc;
+            if (targetTime > 0) video.currentTime = targetTime;
+          }
           video.muted = false;
           video.volume = 1;
           video.play().catch(function () {});
@@ -1823,17 +1849,31 @@
         }
       }
 
+      smartOverlay.addEventListener('click', function (e) {
+        e.stopPropagation();
+        unmuteAndRestart();
+      });
+
+      const pulseBadge = document.getElementById('pulseBadge');
+      if (pulseBadge) {
+        pulseBadge.addEventListener('click', function (e) {
+          e.stopPropagation();
+          unmuteAndRestart();
+        });
+      }
+
       let indicatorTimeout;
       playbackShield.addEventListener('click', function () {
         if (resumeModal && resumeModal.classList.contains('active')) {
           return;
         }
+        if (isUnmuting) return;
         if (!hasUserUnmuted && smartAutoplay && !smartOverlay.classList.contains('hidden')) {
           unmuteAndRestart();
           return;
         }
         if (video.paused) {
-          video.play();
+          video.play().catch(function () {});
           showPlayPause(true);
         } else {
           if (disablePause) return;

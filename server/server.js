@@ -1096,7 +1096,7 @@ function processVideoHLS(vidId, force = false) {
       path.join(videoDir, 'video_%v.m3u8')
     );
 
-    const hlsProc = spawn('ffmpeg', hlsArgs);
+    const hlsProc = spawn('ffmpeg', hlsArgs, { stdio: 'ignore' });
     hlsProc.on('error', () => {
       activeProcessingVids.delete(vidId);
       try {
@@ -4083,8 +4083,33 @@ app.get('/api/videos', authMiddleware, (req, res) => {
       let settings = {};
       try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
       const posterUrl = settings.thumbnailUrl || `${origin}/videos/${r.id}/poster.jpg`;
+      let distinctPlays = r.plays || 0;
+      try {
+        const pRow = db.prepare("SELECT COUNT(DISTINCT session_id) as count FROM analytics_events WHERE video_id = ? AND event_type = 'play'").get(r.id);
+        if (pRow && pRow.count !== undefined) {
+          distinctPlays = pRow.count;
+          if (distinctPlays !== r.plays) {
+            db.prepare('UPDATE videos SET plays = ? WHERE id = ?').run(distinctPlays, r.id);
+          }
+        }
+      } catch (_) {}
+      let currentStatus = r.status;
+      let currentProgress = r.optimization_progress || 100;
+      const vidDir = path.join(VIDEOS_DIR, r.id);
+      if (fs.existsSync(path.join(vidDir, 'main.m3u8')) || fs.existsSync(path.join(vidDir, 'video_0.m3u8'))) {
+        if (currentStatus === 'optimizing' || currentProgress !== 100) {
+          currentStatus = 'ready';
+          currentProgress = 100;
+          try {
+            db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1 WHERE id = ?").run(r.id);
+          } catch (_) {}
+        }
+      }
       return {
         ...r,
+        status: currentStatus,
+        optimization_progress: currentProgress,
+        plays: distinctPlays,
         settings,
         poster_url: posterUrl,
         thumbnail: posterUrl

@@ -100,8 +100,9 @@
         var pageSearch = window.location.search;
         if (pageSearch && pageSearch.length > 1) {
           var pParams = new URLSearchParams(pageSearch);
+          var reservedKeys = ['id', 'preview', 'dash_preview', 'theme', 'token', 'poster', 'resume', 'bar_color', 'smart_autoplay'];
           pParams.forEach(function(val, key) {
-            if (!ifrSrc.includes(key + '=')) {
+            if (!reservedKeys.includes(key.toLowerCase()) && !ifrSrc.includes(key + '=')) {
               ifrSrc += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(val);
             }
           });

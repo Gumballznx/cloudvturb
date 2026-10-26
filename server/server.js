@@ -642,6 +642,9 @@ app.use((req, res, next) => {
       req.path.startsWith('/v/') ||
       /^\/vsl_[a-zA-Z0-9_-]+$/.test(req.path)
     ) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       return res.sendFile(path.join(PUBLIC_DIR, 'player.html'));
     }
   }
@@ -703,6 +706,9 @@ app.use((req, res, next) => {
   }
 
   if (req.path === '/player' || req.path.startsWith('/embed/')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.sendFile(path.join(PUBLIC_DIR, 'player.html'));
   }
 

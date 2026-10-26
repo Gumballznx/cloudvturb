@@ -833,7 +833,7 @@
 
       const vidId = params.get('id') || pathnameId || '';
       const tokenParam = params.get('token') || '';
-      const isPreview = params.get('preview') === '1';
+      const isPreview = (params.get('dash_preview') === '1') || (params.get('preview') === '1' && Boolean(tokenParam));
       const themeParam = params.get('theme') || '';
       if (themeParam === 'light') {
         document.documentElement.classList.add('theme-light');
@@ -1799,33 +1799,26 @@
 
       let isUnmuting = false;
       function unmuteAndRestart() {
-        if (hasUserUnmuted) return;
-        hasUserUnmuted = true;
-        isUnmuting = true;
-        setTimeout(function () { isUnmuting = false; }, 800);
-
         hideSkeletonAndPoster();
         smartOverlay.classList.add('hidden');
         if (thumbSniperBadge) thumbSniperBadge.classList.add('hidden');
         video.loop = Boolean(videoLoop);
+        video.muted = false;
+        video.volume = 1;
+        if (!hasUserUnmuted && video.currentTime > 2) {
+          video.currentTime = 0;
+        }
+        hasUserUnmuted = true;
+        isUnmuting = true;
+        setTimeout(function () { isUnmuting = false; }, 800);
 
         if (hlsInstance) {
-          video.muted = false;
-          video.volume = 1;
-          if (video.currentTime > 2) {
-            video.currentTime = 0;
-          }
           const p = video.play();
           if (p !== undefined) p.catch(function () {});
           return;
         }
 
         if (video.currentSrc || video.src) {
-          video.muted = false;
-          video.volume = 1;
-          if (video.currentTime > 2) {
-            video.currentTime = 0;
-          }
           const p = video.play();
           if (p !== undefined) p.catch(function () {});
           return;
@@ -1859,7 +1852,7 @@
           return;
         }
         if (isUnmuting) return;
-        if (!hasUserUnmuted && smartAutoplay && !smartOverlay.classList.contains('hidden')) {
+        if (!hasUserUnmuted || video.muted) {
           unmuteAndRestart();
           return;
         }

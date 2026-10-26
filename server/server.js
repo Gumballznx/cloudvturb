@@ -446,7 +446,7 @@ try {
   db.prepare(`
     UPDATE videos
     SET plays = (
-      SELECT COUNT(*)
+      SELECT COUNT(DISTINCT session_id)
       FROM analytics_events
       WHERE analytics_events.video_id = videos.id AND analytics_events.event_type = 'play'
     )
@@ -1140,9 +1140,9 @@ function autoCheckPendingHls() {
       const masterPlaylist = path.join(videoDir, 'main.m3u8');
       const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
       if (fs.existsSync(masterPlaylist) && isMultiRendition) {
-        if (!v.hls_ready || v.status === 'optimizing') {
+        if (!v.hls_ready || v.status === 'optimizing' || v.optimization_progress !== 100) {
           const manifestUrl = `/videos/${v.id}/main.m3u8`;
-          db.prepare("UPDATE videos SET status = 'ready', hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
+          db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
         }
       } else if (v.status === 'optimizing' || !isMultiRendition) {
         processVideoHLS(v.id, !isMultiRendition);
@@ -4577,7 +4577,7 @@ app.post('/api/videos/:id/play', (req, res) => {
     db.prepare(`
       UPDATE videos
       SET plays = (
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT session_id)
         FROM analytics_events
         WHERE video_id = ? AND event_type = 'play'
       )
@@ -4670,7 +4670,16 @@ app.get('/api/videos/:id/public', (req, res) => {
 
     let hlsUrl = null;
     const diskManifest = path.join(VIDEOS_DIR, vidId, 'main.m3u8');
-    if (v.hls_ready && v.hls_manifest && fs.existsSync(diskManifest)) {
+    const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
+    if (fs.existsSync(diskManifest) && isMultiRendition) {
+      const manifestUrl = `/videos/${vidId}/main.m3u8`;
+      if (!v.hls_ready || v.status === 'optimizing' || v.optimization_progress !== 100) {
+        try {
+          db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
+        } catch (_) {}
+      }
+      hlsUrl = `${origin}${manifestUrl}`;
+    } else if (v.hls_ready && v.hls_manifest && fs.existsSync(diskManifest)) {
       hlsUrl = `${origin}${v.hls_manifest}`;
     } else if (!activeProcessingVids.has(vidId)) {
       processVideoHLS(vidId, true);
@@ -4760,6 +4769,15 @@ app.post('/api/analytics/event', (req, res) => {
       `).run(cleanWatchTime, lastHeartbeat.id);
       return res.json({ success: true, updated: true });
     }
+  }
+
+  if (eventType === 'play') {
+    const exists = db.prepare(`
+      SELECT id FROM analytics_events
+      WHERE session_id = ? AND event_type = 'play'
+      LIMIT 1
+    `).get(cleanSessionId);
+    if (exists) return res.json({ success: true, duplicate: true });
   }
 
   if (eventType === 'progress' && cleanMilestone !== null) {
@@ -4932,7 +4950,7 @@ app.post('/api/analytics/event', (req, res) => {
     db.prepare(`
       UPDATE videos
       SET plays = (
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT session_id)
         FROM analytics_events
         WHERE video_id = ? AND event_type = 'play'
       )

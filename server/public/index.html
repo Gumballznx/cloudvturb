@@ -13089,7 +13089,16 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function createVideoCardElement(v) {
       const plays = (v.plays || 0).toLocaleString();
-      const pitchSec = v.settings && v.settings.ctaTime ? `${v.settings.ctaTime}s pitch` : 'Sem CTA';
+      let pitchSec = 'Sem CTA';
+      const ctaVal = v.settings && (v.settings.pitchTime !== undefined ? v.settings.pitchTime : v.settings.ctaTime);
+      if (ctaVal !== undefined && ctaVal !== null && ctaVal !== '') {
+        const sec = parseInt(ctaVal, 10);
+        if (!isNaN(sec) && sec > 0) {
+          const m = Math.floor(sec / 60).toString().padStart(2, '0');
+          const s = (sec % 60).toString().padStart(2, '0');
+          pitchSec = `${m}:${s} pitch`;
+        }
+      }
       const isOptimizing = v.status === 'optimizing';
       const currentPct = isOptimizing ? Math.min(95, Math.max(15, Math.round(videoProgressMap[v.id] || v.optimization_progress || 18))) : 100;
       if (isOptimizing && !videoProgressMap[v.id]) {

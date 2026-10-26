@@ -869,7 +869,7 @@ function detectVideoAspectRatio(filePath) {
 
 const activeProcessingVids = new Set();
 
-function processVideoHLS(vidId) {
+function processVideoHLS(vidId, force = false) {
   if (activeProcessingVids.has(vidId)) return;
   activeProcessingVids.add(vidId);
 
@@ -910,7 +910,18 @@ function processVideoHLS(vidId) {
     if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
 
     const masterPlaylistPath = path.join(videoDir, 'main.m3u8');
-    if (fs.existsSync(masterPlaylistPath)) {
+    if (force) {
+      try {
+        if (fs.existsSync(masterPlaylistPath)) fs.unlinkSync(masterPlaylistPath);
+        for (let i = 0; i <= 2; i++) {
+          const vPl = path.join(videoDir, `video_${i}.m3u8`);
+          if (fs.existsSync(vPl)) fs.unlinkSync(vPl);
+        }
+        const oldPl = path.join(videoDir, 'video.m3u8');
+        if (fs.existsSync(oldPl)) fs.unlinkSync(oldPl);
+      } catch (e) {}
+    }
+    if (!force && fs.existsSync(masterPlaylistPath)) {
       const manifestUrl = `/videos/${vidId}/main.m3u8`;
       try {
         db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
@@ -981,10 +992,12 @@ function processVideoHLS(vidId) {
 
     let hasAudio = false;
     let videoCodec = '';
+    let origWidth = 0;
+    let origHeight = 0;
     try {
       const probeStreams = execFileSync('ffprobe', [
         '-v', 'error',
-        '-show_entries', 'stream=codec_type,codec_name',
+        '-show_entries', 'stream=codec_type,codec_name,width,height',
         '-of', 'json',
         inputPath
       ], { timeout: 10000 });
@@ -992,20 +1005,78 @@ function processVideoHLS(vidId) {
       const streams = probeJson.streams || [];
       hasAudio = streams.some(s => s.codec_type === 'audio');
       const vStream = streams.find(s => s.codec_type === 'video');
-      if (vStream) videoCodec = vStream.codec_name;
+      if (vStream) {
+        videoCodec = vStream.codec_name;
+        origWidth = parseInt(vStream.width, 10) || 0;
+        origHeight = parseInt(vStream.height, 10) || 0;
+      }
     } catch (e) {}
 
-    const hlsArgs = ['-y', '-i', inputPath];
-    if (videoCodec === 'h264') {
-      hlsArgs.push('-c:v', 'copy');
-    } else {
-      hlsArgs.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23');
+    if (origWidth <= 0 || origHeight <= 0) {
+      origWidth = 1280;
+      origHeight = 720;
     }
 
-    if (hasAudio) {
-      hlsArgs.push('-c:a', 'aac', '-b:a', '128k');
+    const isVertical = origHeight > origWidth;
+    let w0, h0, w1, h1, w2, h2;
+
+    if (isVertical) {
+      w0 = 360;
+      h0 = Math.max(2, Math.round((origHeight * (360 / origWidth)) / 2) * 2);
+      w1 = Math.min(origWidth, 720);
+      h1 = Math.max(2, Math.round((origHeight * (w1 / origWidth)) / 2) * 2);
+      w2 = origWidth % 2 === 0 ? origWidth : origWidth - 1;
+      h2 = origHeight % 2 === 0 ? origHeight : origHeight - 1;
     } else {
-      hlsArgs.push('-an');
+      h0 = 360;
+      w0 = Math.max(2, Math.round((origWidth * (360 / origHeight)) / 2) * 2);
+      h1 = Math.min(origHeight, 720);
+      w1 = Math.max(2, Math.round((origWidth * (h1 / origHeight)) / 2) * 2);
+      w2 = origWidth % 2 === 0 ? origWidth : origWidth - 1;
+      h2 = origHeight % 2 === 0 ? origHeight : origHeight - 1;
+    }
+
+    w0 = Math.min(w0, w2);
+    h0 = Math.min(h0, h2);
+    w1 = Math.min(w1, w2);
+    h1 = Math.min(h1, h2);
+
+    const hlsArgs = [
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', `[0:v]split=3[v0][v1][v2];[v0]scale=w=${w0}:h=${h0}[v0out];[v1]scale=w=${w1}:h=${h1}[v1out];[v2]scale=w=${w2}:h=${h2}[v2out]`,
+      '-map', '[v0out]',
+      '-c:v:0', 'libx264',
+      '-preset', 'ultrafast',
+      '-b:v:0', '800k',
+      '-maxrate:v:0', '856k',
+      '-bufsize:v:0', '1200k',
+      '-map', '[v1out]',
+      '-c:v:1', 'libx264',
+      '-preset', 'ultrafast',
+      '-b:v:1', '1800k',
+      '-maxrate:v:1', '1926k',
+      '-bufsize:v:1', '2700k',
+      '-map', '[v2out]',
+      '-c:v:2', 'libx264',
+      '-preset', 'ultrafast',
+      '-b:v:2', '3200k',
+      '-maxrate:v:2', '3424k',
+      '-bufsize:v:2', '4800k'
+    ];
+
+    if (hasAudio) {
+      hlsArgs.push(
+        '-map', '0:a?', '-c:a:0', 'aac', '-b:a:0', '96k',
+        '-map', '0:a?', '-c:a:1', 'aac', '-b:a:1', '128k',
+        '-map', '0:a?', '-c:a:2', 'aac', '-b:a:2', '128k',
+        '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2'
+      );
+    } else {
+      hlsArgs.push(
+        '-an',
+        '-var_stream_map', 'v:0 v:1 v:2'
+      );
     }
 
     hlsArgs.push(
@@ -1014,8 +1085,8 @@ function processVideoHLS(vidId) {
       '-hls_playlist_type', 'vod',
       '-hls_flags', 'independent_segments',
       '-master_pl_name', 'main.m3u8',
-      '-hls_segment_filename', path.join(videoDir, 'segment_%03d.ts'),
-      path.join(videoDir, 'video.m3u8')
+      '-hls_segment_filename', path.join(videoDir, 'segment_%v_%03d.ts'),
+      path.join(videoDir, 'video_%v.m3u8')
     );
 
     const hlsProc = spawn('ffmpeg', hlsArgs);
@@ -1028,9 +1099,9 @@ function processVideoHLS(vidId) {
 
     hlsProc.on('close', (code) => {
       activeProcessingVids.delete(vidId);
-      const manifestExists = fs.existsSync(masterPlaylistPath) || fs.existsSync(path.join(videoDir, 'video.m3u8'));
+      const manifestExists = fs.existsSync(masterPlaylistPath) || fs.existsSync(path.join(videoDir, 'video_0.m3u8')) || fs.existsSync(path.join(videoDir, 'video.m3u8'));
       if (code === 0 && manifestExists) {
-        const manifestFile = fs.existsSync(masterPlaylistPath) ? 'main.m3u8' : 'video.m3u8';
+        const manifestFile = fs.existsSync(masterPlaylistPath) ? 'main.m3u8' : (fs.existsSync(path.join(videoDir, 'video_0.m3u8')) ? 'video_0.m3u8' : 'video.m3u8');
         const manifestUrl = `/videos/${vidId}/${manifestFile}`;
         try {
           db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
@@ -4488,7 +4559,7 @@ app.post('/api/videos/:id/reprocess', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Arquivo fonte não disponível para transcodificação.' });
   }
 
-  processVideoHLS(vidId);
+  processVideoHLS(vidId, true);
   res.json({ success: true, message: 'Processamento HLS iniciado.' });
 });
 

@@ -493,7 +493,7 @@ try {
 function getDefaultVideoSettings() {
   return {
     barColor: '#2563EB',
-    borderRadius: '16px',
+    borderRadius: '0px',
     aspectRatio: '16:9',
     smartAutoplay: true,
     autoplayText: 'Seu vídeo ja iniciou\nClique para escutar',

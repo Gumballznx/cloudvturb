@@ -4297,7 +4297,8 @@
       .vturb-editor-top-actions {
         gap: 8px !important;
       }
-      .btn-vturb-embed {
+      .btn-vturb-embed,
+      .btn-save-editor-action {
         padding: 6px 10px !important;
         font-size: 12px !important;
       }
@@ -5790,8 +5791,11 @@
           </div>
         </div>
 
-        <div class="vturb-editor-sidebar-footer">
-          <span>v1.0.0</span>
+        <div class="vturb-editor-sidebar-footer" style="padding: 14px 18px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); flex-shrink: 0;">
+          <button type="button" class="btn-primary-action btn-save-editor-action" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px;" onclick="saveCurrentVideoSettings(this)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span>Salvar Alterações</span>
+          </button>
         </div>
       </div>
 
@@ -6351,6 +6355,12 @@
               </label>
             </div>
           </div>
+        </div>
+        <div class="vturb-editor-sidebar-footer-save" style="padding: 14px 18px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); flex-shrink: 0;">
+          <button type="button" class="btn-primary-action btn-save-editor-action" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px;" onclick="saveCurrentVideoSettings(this)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span>Salvar Alterações</span>
+          </button>
         </div>
       </div>
     </div>
@@ -7703,6 +7713,10 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
               <button type="button" class="btn-vturb-embed" onclick="openEmbedModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                 <span>Embed</span>
+              </button>
+              <button type="button" class="btn-primary-action btn-save-editor-action" id="btnSaveVideoSettings" onclick="saveCurrentVideoSettings(this)" title="Salvar todas as alterações (Ctrl+S)" style="display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; font-size: 13px; font-weight: 600; border-radius: 8px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                <span>Salvar</span>
               </button>
             </div>
           </div>
@@ -16812,33 +16826,46 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       copySnippetWithFeedback('vturbSpeedSnippetArea', 'btnCopySpeedSnippet', 'Código de otimização copiado com sucesso!');
     }
 
-    async function saveCurrentVideoSettings() {
+    async function saveCurrentVideoSettings(clickedBtn = null) {
       if (!currentEditingVideoId) return;
-      const btn = event ? event.currentTarget : document.getElementById('btnSaveVideoSettings');
-      const title = document.getElementById('edTitle').value.trim().slice(0, 70);
+      const saveBtns = document.querySelectorAll('.btn-save-editor-action');
+      saveBtns.forEach(b => setButtonLoading(b, true, 'Salvando...'));
+
+      const titleInput = document.getElementById('edTitle');
+      const title = (titleInput ? titleInput.value : '').trim().slice(0, 70) || (document.getElementById('vturbEditorTitle')?.textContent?.trim() || '');
       const settings = getEditorSettings();
-      setButtonLoading(btn, true, 'Salvando...');
 
       try {
         await api(`/api/videos/${currentEditingVideoId}`, {
           method: 'PUT',
           body: JSON.stringify({ title, settings })
         });
-        const v = videos.find(x => x.id === currentEditingVideoId);
+        const v = (videos || []).find(x => x.id === currentEditingVideoId) || (topVideos || []).find(x => x.id === currentEditingVideoId);
         if (v) {
-          v.title = title;
+          if (title) v.title = title;
           v.settings = settings;
         }
         const tEl = document.getElementById('vturbEditorTitle');
-        if (tEl) tEl.textContent = title || 'Sem título';
-        renderVideosGrid();
+        if (tEl && title) tEl.textContent = title;
+        if (typeof renderVideosGrid === 'function') renderVideosGrid();
+        if (typeof liveUpdateSettings === 'function') liveUpdateSettings();
         showToast('Alterações salvas com sucesso!');
       } catch (err) {
-        showToast(err.message, true);
+        showToast(err.message || 'Erro ao salvar alterações', true);
       } finally {
-        setButtonLoading(btn, false);
+        saveBtns.forEach(b => setButtonLoading(b, false));
       }
     }
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        const edView = document.getElementById('viewEditor');
+        if (edView && edView.classList.contains('active') && currentEditingVideoId) {
+          e.preventDefault();
+          saveCurrentVideoSettings();
+        }
+      }
+    });
+
 
     function deleteVideoPrompt(id) {
       const v = videos.find(x => x.id === id);

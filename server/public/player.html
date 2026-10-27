@@ -406,7 +406,7 @@
       width: 0%;
       height: 100%;
       background-color: #2563EB;
-      transition: width 0.1s linear;
+      transition: width 0.04s linear;
       position: relative;
     }
     .resume-overlay {
@@ -986,8 +986,9 @@
       const barColor = params.get('bar_color') || dbSettings.barColor || '#2563EB';
       const borderRadius = params.get('border_radius') || dbSettings.borderRadius || '0px';
       const smartAutoplay = params.has('smart_autoplay') ? params.get('smart_autoplay') !== '0' : (dbSettings.smartAutoplay !== false);
-      const fakeProgress = params.has('fake_progress') ? params.get('fake_progress') !== '0' : (dbSettings.fakeProgress !== false);
-      const blockSeek = params.has('block_seek') ? params.get('block_seek') !== '0' : (dbSettings.blockSeek !== false);
+      let fakeProgress = params.has('fake_progress') ? params.get('fake_progress') !== '0' : (dbSettings.fakeProgress !== false);
+      let blockSeek = params.has('block_seek') ? params.get('block_seek') !== '0' : (dbSettings.blockSeek !== false);
+      let maxWatchedTime = 0;
       const resumeEnabled = !isPreview && (params.has('resume') ? params.get('resume') !== '0' : (dbSettings.resume !== false));
       const resumeTitle = params.get('res_title') || dbSettings.resumeTitle || 'Já começou a ver este vídeo';
       const resumePlayText = params.get('res_play') || dbSettings.resumePlayText || 'Continuar Assistindo';
@@ -1458,6 +1459,8 @@
           const cfg = e.data.payload || {};
           if (cfg.barColor && progressBarFill) progressBarFill.style.backgroundColor = cfg.barColor;
           if (cfg.borderRadius && playerWrapper) playerWrapper.style.borderRadius = cfg.borderRadius;
+          if (cfg.fakeProgress !== undefined) fakeProgress = Boolean(cfg.fakeProgress);
+          if (cfg.blockSeek !== undefined) blockSeek = Boolean(cfg.blockSeek);
           if (cfg.audioNoticeEnabled !== undefined) applyAudioNoticeSettings(cfg);
           applyHeadline(cfg.headlines, cfg.headlineText, cfg.headlineBgColor, cfg.headlineTextColor);
           applyThumbSniper(cfg.thumbSniper, cfg.thumbSniperText);
@@ -1860,6 +1863,70 @@
         }, 500);
       }
 
+            function calculateProgress(curTime, duration) {
+        if (!duration || duration <= 0) return 0;
+        const r = Math.min(1, Math.max(0, curTime / duration));
+        if (!fakeProgress) {
+          return r * 100;
+        }
+        const circularVal = Math.max(0, 1 - Math.pow(r - 1, 2));
+        return 100 * Math.sqrt(circularVal);
+      }
+
+      function syncProgressBar() {
+        if (!video || !progressBarFill) return;
+        const dur = video.duration || 1;
+        const cur = video.currentTime || 0;
+        const pct = calculateProgress(cur, dur);
+        progressBarFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+      }
+
+      let progressTimer = null;
+      function startProgressLoop() {
+        if (progressTimer) return;
+        progressTimer = setInterval(syncProgressBar, 40);
+      }
+      function stopProgressLoop() {
+        if (progressTimer) {
+          clearInterval(progressTimer);
+          progressTimer = null;
+        }
+        syncProgressBar();
+      }
+
+      video.addEventListener('play', startProgressLoop);
+      video.addEventListener('pause', stopProgressLoop);
+      video.addEventListener('ended', stopProgressLoop);
+
+      video.addEventListener('seeking', function () {
+        if (blockSeek && video.currentTime > maxWatchedTime + 1.0) {
+          video.currentTime = maxWatchedTime;
+        }
+        syncProgressBar();
+      });
+
+      if (progressBarContainer) {
+        progressBarContainer.addEventListener('click', function (e) {
+          if (!video || !video.duration) return;
+          const rect = progressBarContainer.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const clickFraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+          let targetTime = 0;
+          if (fakeProgress) {
+            const r = 1 - Math.sqrt(Math.max(0, 1 - Math.pow(clickFraction, 2)));
+            targetTime = r * video.duration;
+          } else {
+            targetTime = clickFraction * video.duration;
+          }
+
+          if (blockSeek && targetTime > maxWatchedTime + 1.0) {
+            return;
+          }
+          video.currentTime = targetTime;
+          syncProgressBar();
+        });
+      }
+
       const pixelFired = { p25: false, p50: false, p75: false, p90: false, pitch: false };
       const milestonesFired = new Set();
 
@@ -1874,14 +1941,11 @@
           }
         }
 
-        let percentage = (cur / dur) * 100;
-
-        if (fakeProgress && percentage > 0 && percentage < 95) {
-          const factor = Math.min(1.35, 1 + (1 - percentage / 100) * 0.35);
-          percentage = Math.min(percentage * factor, 98);
+        if (cur > maxWatchedTime) {
+          maxWatchedTime = cur;
         }
 
-        progressBarFill.style.width = Math.min(100, Math.max(0, percentage)) + '%';
+        syncProgressBar();
 
         const rawPct = (cur / dur) * 100;
         const targets = [10, 25, 50, 75, 90];

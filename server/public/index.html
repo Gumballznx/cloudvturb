@@ -4302,6 +4302,12 @@
         padding: 6px 10px !important;
         font-size: 12px !important;
       }
+      .btn-save-editor-action:disabled,
+      .btn-save-editor-action[disabled] {
+        opacity: 0.45 !important;
+        cursor: not-allowed !important;
+        pointer-events: none !important;
+      }
       .vturb-stage-container,
       .vturb-preview-stage {
         padding: 12px !important;
@@ -5792,7 +5798,7 @@
         </div>
 
         <div class="vturb-editor-sidebar-footer" style="padding: 14px 18px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); flex-shrink: 0;">
-          <button type="button" class="btn-primary-action btn-save-editor-action" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px;" onclick="saveCurrentVideoSettings(this)">
+          <button type="button" class="btn-primary-action btn-save-editor-action" disabled style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px; opacity: 0.45; cursor: not-allowed; pointer-events: none;" onclick="saveCurrentVideoSettings(this)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
             <span>Salvar Alterações</span>
           </button>
@@ -6357,7 +6363,7 @@
           </div>
         </div>
         <div class="vturb-editor-sidebar-footer-save" style="padding: 14px 18px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); flex-shrink: 0;">
-          <button type="button" class="btn-primary-action btn-save-editor-action" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px;" onclick="saveCurrentVideoSettings(this)">
+          <button type="button" class="btn-primary-action btn-save-editor-action" disabled style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px; opacity: 0.45; cursor: not-allowed; pointer-events: none;" onclick="saveCurrentVideoSettings(this)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
             <span>Salvar Alterações</span>
           </button>
@@ -7714,7 +7720,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                 <span>Embed</span>
               </button>
-              <button type="button" class="btn-primary-action btn-save-editor-action" id="btnSaveVideoSettings" onclick="saveCurrentVideoSettings(this)" title="Salvar todas as alterações (Ctrl+S)" style="display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; font-size: 13px; font-weight: 600; border-radius: 8px;">
+              <button type="button" class="btn-primary-action btn-save-editor-action" id="btnSaveVideoSettings" disabled onclick="saveCurrentVideoSettings(this)" title="Salvar todas as alterações (Ctrl+S)" style="display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; opacity: 0.45; cursor: not-allowed; pointer-events: none;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                 <span>Salvar</span>
               </button>
@@ -15870,6 +15876,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       liveUpdateSettings();
       applyPhoneMockupAspect(s.aspectRatio || '16:9', ['vturbMobileCanvas', 'vturbDetailsMobileCanvas']);
+      captureEditorSnapshot();
     }
 
     function exitEditor() {
@@ -16473,6 +16480,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     function liveUpdateSettings() {
       const s = getEditorSettings();
       syncSidebarBadges(s);
+      checkEditorDirty();
 
       const iframes = [
         document.getElementById('editorPreviewFrame'),
@@ -16826,8 +16834,53 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       copySnippetWithFeedback('vturbSpeedSnippetArea', 'btnCopySpeedSnippet', 'Código de otimização copiado com sucesso!');
     }
 
+    let initialEditorSnapshot = null;
+    let isEditorDirty = false;
+
+    function getFullEditorState() {
+      const title = (document.getElementById('edTitle')?.value || '').trim();
+      return JSON.stringify({
+        title,
+        settings: getEditorSettings()
+      });
+    }
+
+    function updateSaveButtonsState() {
+      const saveBtns = document.querySelectorAll('.btn-save-editor-action');
+      saveBtns.forEach(btn => {
+        btn.disabled = !isEditorDirty;
+        if (isEditorDirty) {
+          btn.removeAttribute('disabled');
+          btn.style.opacity = '1';
+          btn.style.cursor = 'pointer';
+          btn.style.pointerEvents = 'auto';
+        } else {
+          btn.setAttribute('disabled', 'disabled');
+          btn.style.opacity = '0.45';
+          btn.style.cursor = 'not-allowed';
+          btn.style.pointerEvents = 'none';
+        }
+      });
+    }
+
+    function checkEditorDirty() {
+      if (!initialEditorSnapshot) return;
+      const current = getFullEditorState();
+      const dirty = current !== initialEditorSnapshot;
+      if (dirty !== isEditorDirty) {
+        isEditorDirty = dirty;
+        updateSaveButtonsState();
+      }
+    }
+
+    function captureEditorSnapshot() {
+      initialEditorSnapshot = getFullEditorState();
+      isEditorDirty = false;
+      updateSaveButtonsState();
+    }
+
     async function saveCurrentVideoSettings(clickedBtn = null) {
-      if (!currentEditingVideoId) return;
+      if (!currentEditingVideoId || !isEditorDirty) return;
       const saveBtns = document.querySelectorAll('.btn-save-editor-action');
       saveBtns.forEach(b => setButtonLoading(b, true, 'Salvando...'));
 
@@ -16849,6 +16902,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         if (tEl && title) tEl.textContent = title;
         if (typeof renderVideosGrid === 'function') renderVideosGrid();
         if (typeof liveUpdateSettings === 'function') liveUpdateSettings();
+        captureEditorSnapshot();
         showToast('Alterações salvas com sucesso!');
       } catch (err) {
         showToast(err.message || 'Erro ao salvar alterações', true);
@@ -16861,7 +16915,9 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const edView = document.getElementById('viewEditor');
         if (edView && edView.classList.contains('active') && currentEditingVideoId) {
           e.preventDefault();
-          saveCurrentVideoSettings();
+          if (isEditorDirty) {
+            saveCurrentVideoSettings();
+          }
         }
       }
     });

@@ -8147,7 +8147,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
     </div>
   </div>
 
-  <div class="modal-overlay" id="confirmActionModal">
+  <div class="modal-overlay" id="confirmActionModal" style="z-index: 10000;">
     <div class="modal-box" style="max-width: 420px;">
       <div class="modal-header-clean">
         <div class="modal-title-clean" id="confirmModalTitle">Confirmação</div>
@@ -16976,9 +16976,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     }
 
     let selectedVideoFiles = [];
+    let currentUploadXhr = null;
+    let isUploadingVideo = false;
 
     function openNewVideoModal() {
-      clearSelectedVideoFiles();
+      clearSelectedVideoFiles(true);
       document.getElementById('newVidTitle').value = '';
       document.getElementById('newVidUrl').value = '';
       const banner = document.getElementById('importSuccessBanner');
@@ -16998,6 +17000,46 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     }
 
     function closeNewVideoModal() {
+      if (isUploadingVideo) {
+        showConfirmDialog({
+          title: 'Cancelar envio do vídeo?',
+          message: 'O envio do vídeo ainda está em andamento. Se cancelar agora, o progresso atual será interrompido e o arquivo não será importado.',
+          confirmText: 'Cancelar Envio',
+          isDanger: true,
+          onConfirm: () => {
+            if (currentUploadXhr) {
+              try { currentUploadXhr.abort(); } catch (e) {}
+              currentUploadXhr = null;
+            }
+            isUploadingVideo = false;
+            const btn = document.getElementById('btnSubmitNewVideo');
+            if (btn) setButtonLoading(btn, false);
+            const progressDiv = document.getElementById('uploadStatusProgress');
+            if (progressDiv) progressDiv.style.display = 'none';
+            doClearSelectedVideoFiles();
+            document.getElementById('newVideoModal').classList.remove('active');
+            closeConfirmModal();
+            showToast('Envio do vídeo cancelado.');
+          }
+        });
+        return;
+      }
+
+      if (selectedVideoFiles && selectedVideoFiles.length > 0) {
+        showConfirmDialog({
+          title: 'Descartar seleção de vídeos?',
+          message: 'Você possui vídeos selecionados para importação. Deseja fechar e descartar a seleção?',
+          confirmText: 'Descartar',
+          isDanger: true,
+          onConfirm: () => {
+            doClearSelectedVideoFiles();
+            document.getElementById('newVideoModal').classList.remove('active');
+            closeConfirmModal();
+          }
+        });
+        return;
+      }
+
       document.getElementById('newVideoModal').classList.remove('active');
     }
 
@@ -17046,16 +17088,45 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     function removeSelectedVideoFile(index) {
       if (index >= 0 && index < selectedVideoFiles.length) {
-        selectedVideoFiles.splice(index, 1);
-        renderSelectedFilesList();
-        if (selectedVideoFiles.length === 0) {
-          const fileInput = document.getElementById('newVidFile');
-          if (fileInput) fileInput.value = '';
-        }
+        const file = selectedVideoFiles[index];
+        const fileName = file ? file.name : 'este vídeo';
+        showConfirmDialog({
+          title: 'Remover vídeo selecionado?',
+          message: `Deseja remover "${truncateFilename(fileName, 32)}" da lista de importação?`,
+          confirmText: 'Remover',
+          isDanger: true,
+          onConfirm: () => {
+            selectedVideoFiles.splice(index, 1);
+            renderSelectedFilesList();
+            if (selectedVideoFiles.length === 0) {
+              const fileInput = document.getElementById('newVidFile');
+              if (fileInput) fileInput.value = '';
+            }
+            closeConfirmModal();
+          }
+        });
       }
     }
 
-    function clearSelectedVideoFiles() {
+    function clearSelectedVideoFiles(skipConfirm = false) {
+      if (!skipConfirm && selectedVideoFiles && selectedVideoFiles.length > 0) {
+        const totalFiles = selectedVideoFiles.length;
+        showConfirmDialog({
+          title: 'Remover todos os vídeos?',
+          message: `Tem certeza que deseja remover ${totalFiles === 1 ? 'o vídeo selecionado' : 'todos os ' + totalFiles + ' vídeos selecionados'} da lista de importação?`,
+          confirmText: 'Remover Todos',
+          isDanger: true,
+          onConfirm: () => {
+            doClearSelectedVideoFiles();
+            closeConfirmModal();
+          }
+        });
+        return;
+      }
+      doClearSelectedVideoFiles();
+    }
+
+    function doClearSelectedVideoFiles() {
       selectedVideoFiles = [];
       const fileInput = document.getElementById('newVidFile');
       if (fileInput) fileInput.value = '';
@@ -17304,6 +17375,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       if (selectedVideoFiles && selectedVideoFiles.length > 0) {
         const total = selectedVideoFiles.length;
+        isUploadingVideo = true;
         setButtonLoading(btn, true, total === 1 ? 'Enviando...' : `Enviando (1/${total})...`);
         const statusText = document.getElementById('uploadStatusText');
         const progressDiv = document.getElementById('uploadStatusProgress');
@@ -17332,6 +17404,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
             const uploadRes = await new Promise((resolve, reject) => {
               const xhr = new XMLHttpRequest();
+              currentUploadXhr = xhr;
               xhr.open('POST', '/api/upload');
               xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
@@ -17349,6 +17422,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
               };
 
               xhr.onload = () => {
+                currentUploadXhr = null;
                 if (xhr.status >= 200 && xhr.status < 300) {
                   try {
                     resolve(JSON.parse(xhr.responseText));
@@ -17365,7 +17439,14 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
                 }
               };
 
-              xhr.onerror = () => reject(new Error('Erro de conexão ao enviar vídeo'));
+              xhr.onerror = () => {
+                currentUploadXhr = null;
+                reject(new Error('Erro de conexão ao enviar vídeo'));
+              };
+              xhr.onabort = () => {
+                currentUploadXhr = null;
+                reject(new Error('Upload cancelado pelo usuário.'));
+              };
               xhr.send(formData);
             });
 
@@ -17408,15 +17489,20 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
             successCount++;
           } catch (err) {
+            if (err.message && err.message.includes('cancelado')) {
+              break;
+            }
             showToast(`Falha em "${fileNameTruncated}": ${err.message}`, true);
           }
         }
 
+        isUploadingVideo = false;
+        currentUploadXhr = null;
         setButtonLoading(btn, false);
         if (progressDiv) progressDiv.style.display = 'none';
 
         if (successCount > 0) {
-          clearSelectedVideoFiles();
+          clearSelectedVideoFiles(true);
           document.getElementById('newVidTitle').value = '';
           await loadAllDashboardData();
           renderVideosGrid();

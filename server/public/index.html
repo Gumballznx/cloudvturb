@@ -16977,9 +16977,17 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
     let selectedVideoFiles = [];
     let currentUploadXhr = null;
+    let currentUploadId = null;
     let isUploadingVideo = false;
+    let isUploadCancelled = false;
 
     function openNewVideoModal() {
+      isUploadCancelled = false;
+      isUploadingVideo = false;
+      currentUploadXhr = null;
+      currentUploadId = null;
+      const btn = document.getElementById('btnSubmitNewVideo');
+      if (btn) setButtonLoading(btn, false);
       clearSelectedVideoFiles(true);
       document.getElementById('newVidTitle').value = '';
       document.getElementById('newVidUrl').value = '';
@@ -17007,9 +17015,17 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           confirmText: 'Cancelar Envio',
           isDanger: true,
           onConfirm: () => {
+            isUploadCancelled = true;
             if (currentUploadXhr) {
               try { currentUploadXhr.abort(); } catch (e) {}
               currentUploadXhr = null;
+            }
+            if (currentUploadId) {
+              api('/api/upload/chunk/cancel', {
+                method: 'POST',
+                body: JSON.stringify({ uploadId: currentUploadId })
+              }).catch(() => {});
+              currentUploadId = null;
             }
             isUploadingVideo = false;
             const btn = document.getElementById('btnSubmitNewVideo');
@@ -17033,6 +17049,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           isDanger: true,
           onConfirm: () => {
             doClearSelectedVideoFiles();
+            const btn = document.getElementById('btnSubmitNewVideo');
+            if (btn) setButtonLoading(btn, false);
             document.getElementById('newVideoModal').classList.remove('active');
             closeConfirmModal();
           }
@@ -17040,6 +17058,8 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         return;
       }
 
+      const btn = document.getElementById('btnSubmitNewVideo');
+      if (btn) setButtonLoading(btn, false);
       document.getElementById('newVideoModal').classList.remove('active');
     }
 
@@ -17053,7 +17073,11 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (!selectedVideoFiles || selectedVideoFiles.length === 0) {
         container.style.display = 'none';
         listEl.innerHTML = '';
-        if (submitBtn) submitBtn.textContent = 'Salvar e Importar';
+        if (submitBtn) {
+          delete submitBtn.dataset.origHtml;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Salvar e Importar';
+        }
         return;
       }
 
@@ -17082,11 +17106,17 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
       container.style.display = 'block';
       if (submitBtn) {
+        delete submitBtn.dataset.origHtml;
+        submitBtn.disabled = false;
         submitBtn.textContent = `Salvar e Importar (${count} ${count === 1 ? 'vídeo' : 'vídeos'})`;
       }
     }
 
     function removeSelectedVideoFile(index) {
+      if (isUploadingVideo) {
+        showToast('Não é possível remover vídeos durante o envio. Cancele o envio primeiro.', true);
+        return;
+      }
       if (index >= 0 && index < selectedVideoFiles.length) {
         const file = selectedVideoFiles[index];
         const fileName = file ? file.name : 'este vídeo';
@@ -17109,6 +17139,10 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
     }
 
     function clearSelectedVideoFiles(skipConfirm = false) {
+      if (isUploadingVideo && !skipConfirm) {
+        showToast('Não é possível remover vídeos durante o envio. Cancele o envio primeiro.', true);
+        return;
+      }
       if (!skipConfirm && selectedVideoFiles && selectedVideoFiles.length > 0) {
         const totalFiles = selectedVideoFiles.length;
         showConfirmDialog({
@@ -17399,56 +17433,99 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
           if (percentLabel) percentLabel.textContent = '0%';
 
           try {
-            const formData = new FormData();
-            formData.append('videoFile', file);
+            const CHUNK_SIZE = 25 * 1024 * 1024;
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            const uploadId = 'upl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+            currentUploadId = uploadId;
 
-            const uploadRes = await new Promise((resolve, reject) => {
-              const xhr = new XMLHttpRequest();
-              currentUploadXhr = xhr;
-              xhr.open('POST', '/api/upload');
-              xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            let uploadRes = null;
 
-              xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                  const pct = Math.round((e.loaded / e.total) * 100);
-                  if (progressBar) progressBar.style.width = pct + '%';
-                  if (percentLabel) percentLabel.textContent = pct + '%';
-                  if (statusText) {
-                    statusText.textContent = total > 1
-                      ? `Enviando vídeo ${i + 1} de ${total}: ${fileNameTruncated} (${pct}%)`
-                      : `Enviando vídeo: ${fileNameTruncated} (${pct}%)`;
+            for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+              if (isUploadCancelled) {
+                throw new Error('Upload cancelado pelo usuário.');
+              }
+
+              const startByte = chunkIdx * CHUNK_SIZE;
+              const endByte = Math.min(file.size, startByte + CHUNK_SIZE);
+              const chunkBlob = file.slice(startByte, endByte);
+
+              const chunkFormData = new FormData();
+              chunkFormData.append('uploadId', uploadId);
+              chunkFormData.append('chunkIndex', chunkIdx);
+              chunkFormData.append('totalChunks', totalChunks);
+              chunkFormData.append('totalSize', file.size);
+              chunkFormData.append('originalName', file.name);
+              chunkFormData.append('chunk', chunkBlob, file.name);
+
+              const chunkRes = await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                currentUploadXhr = xhr;
+
+                const queryParams = new URLSearchParams({
+                  uploadId: uploadId,
+                  chunkIndex: chunkIdx,
+                  totalChunks: totalChunks,
+                  totalSize: file.size,
+                  originalName: file.name
+                });
+
+                xhr.open('POST', `/api/upload/chunk?${queryParams.toString()}`);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+                xhr.upload.onprogress = (e) => {
+                  if (e.lengthComputable) {
+                    const loadedTotal = startByte + e.loaded;
+                    const pct = Math.min(99, Math.round((loadedTotal / file.size) * 100));
+                    if (progressBar) progressBar.style.width = pct + '%';
+                    if (percentLabel) percentLabel.textContent = pct + '%';
+                    if (statusText) {
+                      statusText.textContent = total > 1
+                        ? `Enviando vídeo ${i + 1} de ${total}: ${fileNameTruncated} (${pct}%)`
+                        : `Enviando vídeo: ${fileNameTruncated} (${pct}%)`;
+                    }
                   }
-                }
-              };
+                };
 
-              xhr.onload = () => {
-                currentUploadXhr = null;
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  try {
-                    resolve(JSON.parse(xhr.responseText));
-                  } catch (e) {
-                    reject(new Error('Resposta inválida do servidor.'));
+                xhr.onload = () => {
+                  currentUploadXhr = null;
+                  if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                      resolve(JSON.parse(xhr.responseText));
+                    } catch (e) {
+                      reject(new Error('Resposta inválida do servidor.'));
+                    }
+                  } else {
+                    try {
+                      const errJson = JSON.parse(xhr.responseText);
+                      reject(new Error(errJson.error || 'Falha no upload da fatia ' + (chunkIdx + 1)));
+                    } catch (e) {
+                      reject(new Error('Erro no upload da fatia ' + (chunkIdx + 1)));
+                    }
                   }
-                } else {
-                  try {
-                    const errJson = JSON.parse(xhr.responseText);
-                    reject(new Error(errJson.error || 'Falha no upload'));
-                  } catch (e) {
-                    reject(new Error('Erro durante o upload'));
-                  }
-                }
-              };
+                };
 
-              xhr.onerror = () => {
-                currentUploadXhr = null;
-                reject(new Error('Erro de conexão ao enviar vídeo'));
-              };
-              xhr.onabort = () => {
-                currentUploadXhr = null;
-                reject(new Error('Upload cancelado pelo usuário.'));
-              };
-              xhr.send(formData);
-            });
+                xhr.onerror = () => {
+                  currentUploadXhr = null;
+                  reject(new Error('Erro de conexão ao enviar vídeo'));
+                };
+                xhr.onabort = () => {
+                  currentUploadXhr = null;
+                  reject(new Error('Upload cancelado pelo usuário.'));
+                };
+
+                xhr.send(chunkFormData);
+              });
+
+              if (chunkRes && chunkRes.done) {
+                uploadRes = chunkRes;
+                if (progressBar) progressBar.style.width = '100%';
+                if (percentLabel) percentLabel.textContent = '100%';
+              }
+            }
+
+            if (!uploadRes || !uploadRes.filePath) {
+              throw new Error('Falha na consolidação do arquivo no servidor.');
+            }
 
             let finalTitle = '';
             if (rawUserTitle) {

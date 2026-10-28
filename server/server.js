@@ -72,6 +72,25 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
 if (!fs.existsSync(PUBLIC_DIR)) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+const CHUNKS_DIR = path.join(VIDEOS_DIR, '.chunks');
+if (!fs.existsSync(CHUNKS_DIR)) fs.mkdirSync(CHUNKS_DIR, { recursive: true });
+
+function cleanOldChunks() {
+  try {
+    if (!fs.existsSync(CHUNKS_DIR)) return;
+    const now = Date.now();
+    const files = fs.readdirSync(CHUNKS_DIR);
+    for (const f of files) {
+      const p = path.join(CHUNKS_DIR, f);
+      const st = fs.statSync(p);
+      if (now - st.mtimeMs > 2 * 60 * 60 * 1000) {
+        try { fs.unlinkSync(p); } catch (e) {}
+      }
+    }
+  } catch (e) {}
+}
+setInterval(cleanOldChunks, 60 * 60 * 1000);
+cleanOldChunks();
 
 const db = new Database(path.join(DATA_DIR, 'cloudvturb.db'));
 db.pragma('journal_mode = WAL');
@@ -1406,6 +1425,23 @@ const upload = multer({
     }
     cb(null, true);
   }
+});
+
+const chunkStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, CHUNKS_DIR);
+  },
+  filename: function (req, file, cb) {
+    const rawId = req.query.uploadId || (req.body && req.body.uploadId) || 'temp_' + Date.now();
+    const safeId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, '');
+    const chunkIndex = parseInt(req.query.chunkIndex !== undefined ? req.query.chunkIndex : (req.body && req.body.chunkIndex !== undefined ? req.body.chunkIndex : '0'), 10);
+    cb(null, `${safeId}_chunk_${isNaN(chunkIndex) ? 0 : chunkIndex}`);
+  }
+});
+
+const chunkUpload = multer({
+  storage: chunkStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
 
 function checkStorageQuotaPre(req, res, next) {
@@ -5829,6 +5865,113 @@ app.post('/api/upload', authMiddleware, checkStorageQuotaPre, (req, res) => {
       videoUrl: videoUrl
     });
   });
+});
+
+app.post('/api/upload/chunk', authMiddleware, checkStorageQuotaPre, (req, res) => {
+  chunkUpload.single('chunk')(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Falha no upload da fatia do arquivo.' });
+    }
+
+    const rawId = req.query.uploadId || (req.body && req.body.uploadId);
+    const uploadId = rawId ? String(rawId).replace(/[^a-zA-Z0-9_-]/g, '') : '';
+    const chunkIndex = parseInt(req.query.chunkIndex !== undefined ? req.query.chunkIndex : (req.body && req.body.chunkIndex), 10);
+    const totalChunks = parseInt(req.query.totalChunks !== undefined ? req.query.totalChunks : (req.body && req.body.totalChunks), 10);
+    const originalName = req.query.originalName || (req.body && req.body.originalName) || 'video.mp4';
+    const totalSize = parseInt(req.query.totalSize !== undefined ? req.query.totalSize : (req.body && req.body.totalSize || '0'), 10);
+
+    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || !req.file) {
+      return res.status(400).json({ error: 'Parâmetros de fatia inválidos ou arquivo não enviado.' });
+    }
+
+    if (chunkIndex + 1 < totalChunks) {
+      return res.json({
+        success: true,
+        done: false,
+        chunkIndex,
+        totalChunks
+      });
+    }
+
+    const isOwner = req.user.role === 'owner';
+    const userUsed = getUserStorageBytes(req.user.id);
+    const memberLimit = getMemberStorageLimitBytes();
+    const memberLimitGb = Math.round(memberLimit / (1024 * 1024 * 1024));
+
+    if (!isOwner && (userUsed + totalSize > memberLimit)) {
+      for (let i = 0; i < totalChunks; i++) {
+        try { fs.unlinkSync(path.join(CHUNKS_DIR, `${uploadId}_chunk_${i}`)); } catch (e) {}
+      }
+      return res.status(400).json({ error: `Cota individual de ${memberLimitGb} GB atingida.` });
+    }
+
+    const currentUsed = getUsedStorageBytes();
+    if (currentUsed + totalSize > getServerStorageLimitBytes()) {
+      for (let i = 0; i < totalChunks; i++) {
+        try { fs.unlinkSync(path.join(CHUNKS_DIR, `${uploadId}_chunk_${i}`)); } catch (e) {}
+      }
+      return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
+    }
+
+    const ext = path.extname(originalName).toLowerCase() || '.mp4';
+    const uniqueName = 'vsl_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex') + ext;
+    const finalPath = path.join(VIDEOS_DIR, uniqueName);
+
+    try {
+      const writeStream = fs.createWriteStream(finalPath);
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(CHUNKS_DIR, `${uploadId}_chunk_${i}`);
+        if (!fs.existsSync(chunkPath)) {
+          writeStream.destroy();
+          try { fs.unlinkSync(finalPath); } catch (e) {}
+          return res.status(400).json({ error: `Fatia ${i} não encontrada. Envio incompleto.` });
+        }
+        const buf = fs.readFileSync(chunkPath);
+        writeStream.write(buf);
+        try { fs.unlinkSync(chunkPath); } catch (e) {}
+      }
+      await new Promise((resolve, reject) => {
+        writeStream.end(resolve);
+        writeStream.on('error', reject);
+      });
+
+      const finalStat = fs.statSync(finalPath);
+      const probedDuration = getVideoDurationFormatted(finalPath);
+      const host = req.get('host') || '';
+      const isProd = host.includes(BASE_DOMAIN);
+      const videoDomain = isProd ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
+      const videoUrl = `${videoDomain}/videos/${uniqueName}`;
+
+      res.json({
+        success: true,
+        done: true,
+        filename: uniqueName,
+        filePath: finalPath,
+        fileSize: finalStat.size,
+        duration: probedDuration || null,
+        videoUrl: videoUrl
+      });
+    } catch (mergeErr) {
+      try { fs.unlinkSync(finalPath); } catch (e) {}
+      return res.status(500).json({ error: 'Falha ao consolidar vídeo: ' + mergeErr.message });
+    }
+  });
+});
+
+app.post('/api/upload/chunk/cancel', authMiddleware, (req, res) => {
+  const rawId = req.body && req.body.uploadId;
+  const uploadId = rawId ? String(rawId).replace(/[^a-zA-Z0-9_-]/g, '') : '';
+  if (uploadId) {
+    try {
+      const files = fs.readdirSync(CHUNKS_DIR);
+      for (const f of files) {
+        if (f.startsWith(`${uploadId}_`)) {
+          try { fs.unlinkSync(path.join(CHUNKS_DIR, f)); } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+  res.json({ success: true });
 });
 
 app.get('/api/google/config', authMiddleware, (req, res) => {

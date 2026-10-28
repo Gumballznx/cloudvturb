@@ -7279,7 +7279,7 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
                 </div>
                 <div class="form-row" style="margin-bottom: 0;">
                   <label class="form-label">Telefone</label>
-                  <input type="tel" id="profPhone" class="form-input-text" placeholder="+55 11 99999-9999" oninput="checkProfileChanges()">
+                  <input type="tel" id="profPhone" class="form-input-text" placeholder="+258 84 123 4567" oninput="checkProfileChanges()">
                 </div>
               </div>
 
@@ -17911,11 +17911,15 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const elLast = document.getElementById('profLastName');
         const elEmail = document.getElementById('profEmail');
         const elPhone = document.getElementById('profPhone');
-        if (elFirst && (cached.first_name || cached.name)) {
-          elFirst.value = cached.first_name || (cached.name ? cached.name.split(' ')[0] : '');
+        const rawName = (cached.name || cached.full_name || '').trim();
+        const nameParts = rawName ? rawName.split(/\s+/) : [];
+        const fallbackFirst = nameParts[0] || '';
+        const fallbackLast = nameParts.slice(1).join(' ') || '';
+        if (elFirst) {
+          elFirst.value = cached.first_name || fallbackFirst;
         }
-        if (elLast && (cached.last_name || cached.name)) {
-          elLast.value = cached.last_name || (cached.name ? cached.name.split(' ').slice(1).join(' ') : '');
+        if (elLast) {
+          elLast.value = cached.last_name || fallbackLast;
         }
         if (elEmail && cached.email) elEmail.value = cached.email;
         if (elPhone && cached.phone) elPhone.value = cached.phone;
@@ -17969,8 +17973,12 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
         const elEmail = document.getElementById('profEmail');
         const elPhone = document.getElementById('profPhone');
 
-        if (elFirst) elFirst.value = user.first_name || '';
-        if (elLast) elLast.value = user.last_name || '';
+        const rawUserName = (user.name || user.full_name || '').trim();
+        const userNameParts = rawUserName ? rawUserName.split(/\s+/) : [];
+        const fallbackUserFirst = userNameParts[0] || '';
+        const fallbackUserLast = userNameParts.slice(1).join(' ') || '';
+        if (elFirst) elFirst.value = user.first_name || fallbackUserFirst;
+        if (elLast) elLast.value = user.last_name || fallbackUserLast;
         if (elEmail) elEmail.value = user.email || '';
         if (elPhone) elPhone.value = user.phone || '';
 

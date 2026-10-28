@@ -2979,6 +2979,17 @@ app.get('/api/user/profile', authMiddleware, (req, res) => {
     FROM users WHERE id = ?
   `).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+  if (!user.first_name && !user.last_name) {
+    const rawName = (user.name || user.full_name || '').trim();
+    if (rawName) {
+      const parts = rawName.split(/\s+/);
+      user.first_name = parts[0] || '';
+      user.last_name = parts.slice(1).join(' ') || '';
+      try {
+        db.prepare('UPDATE users SET first_name = ?, last_name = ? WHERE id = ?').run(user.first_name, user.last_name, user.id);
+      } catch (e) {}
+    }
+  }
   res.json({ user });
 });
 

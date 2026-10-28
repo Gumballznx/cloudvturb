@@ -2685,7 +2685,7 @@ app.post('/api/onboarding/complete', authMiddleware, (req, res) => {
 
 app.get('/api/admin/users', authMiddleware, ownerMiddleware, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, name, email, role, status, created_at FROM users ORDER BY created_at DESC').all();
+    const users = db.prepare('SELECT id, name, email, role, status, avatar_url, full_name, created_at FROM users ORDER BY created_at DESC').all();
     const usersWithStorage = users.map(u => {
       let usedBytes = 0;
       let videoCount = 0;

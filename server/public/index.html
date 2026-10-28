@@ -17591,9 +17591,25 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
 
           const createdDate = u.created_at ? formatDate(u.created_at) : '-';
           const roleLabel = uRole === 'owner' ? 'OWNER' : (uRole === 'admin' ? 'ADMIN' : 'MEMBRO');
+          const displayName = u.name || u.full_name || 'Sem nome';
+          const initial = displayName ? displayName.charAt(0).toUpperCase() : (u.email ? u.email.charAt(0).toUpperCase() : 'U');
+          const avatarHtml = `
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--color-primary-soft, rgba(37,99,235,0.1)); border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--primary, #2563eb); position: relative; overflow: hidden; flex-shrink: 0;">
+              <span>${escapeHtml(initial)}</span>
+              ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="${escapeHtml(displayName)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; position: absolute; top: 0; left: 0;" onerror="this.remove()">` : ''}
+            </div>
+          `;
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><strong>${escapeHtml(u.name || 'Sem nome')}</strong></td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                ${avatarHtml}
+                <div>
+                  <strong style="color: var(--text-main); font-size: 13.5px;">${escapeHtml(displayName)}</strong>
+                  ${isSelf ? '<span style="font-size: 11px; color: var(--primary); margin-left: 6px;">(Você)</span>' : ''}
+                </div>
+              </div>
+            </td>
             <td>${escapeHtml(u.email || '-')}</td>
             <td><span class="user-role-tag">${roleLabel}</span></td>
             <td><span style="font-size:12.5px;font-weight:600;color:var(--text-main);">${u.storageFormatted || '0 MB'}</span> <span style="font-size:11px;color:var(--text-dim);">(${u.videoCount || 0} vídeos)</span></td>

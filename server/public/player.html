@@ -1004,6 +1004,9 @@
         } catch (e) {}
       }
       const hasSavedResume = !isPreview && savedResumeTime > 5;
+      if (hasSavedResume) {
+        maxWatchedTime = savedResumeTime;
+      }
 
       const turboEnabled = params.has('turbo') ? params.get('turbo') === '1' : Boolean(dbSettings.turbo);
 
@@ -1405,15 +1408,24 @@
         if (thumbSniperBadge) thumbSniperBadge.classList.add('hidden');
         video.muted = false;
         video.volume = 1;
-        video.currentTime = targetTime;
+        maxWatchedTime = Math.max(maxWatchedTime, targetTime);
+        try {
+          video.currentTime = targetTime;
+        } catch (e) {}
         const playPromise = video.play();
         if (playPromise !== undefined) {
           playPromise.then(function () {
             registerPlay();
+            if (targetTime > 0 && Math.abs(video.currentTime - targetTime) > 2) {
+              video.currentTime = targetTime;
+            }
           }).catch(function () {
             video.muted = true;
             video.play().then(function () {
               registerPlay();
+              if (targetTime > 0 && Math.abs(video.currentTime - targetTime) > 2) {
+                video.currentTime = targetTime;
+              }
             }).catch(function () {});
           });
         }
@@ -1447,6 +1459,7 @@
             btnResumeNo.onclick = function (e) {
               if (e) e.stopPropagation();
               try { localStorage.removeItem(storageKey); } catch (err) {}
+              maxWatchedTime = 0;
               resumeAndPlay(0);
             };
           }
@@ -1628,7 +1641,9 @@
           hlsInstance.loadSource(streamUrl);
           hlsInstance.attachMedia(video);
           hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, function () {
-            if (startTime > 0 && !hlsConfig.startPosition) video.currentTime = startTime;
+            if (startTime > 0) {
+              video.currentTime = startTime;
+            }
             if (startPaused) {
               video.pause();
               return;
@@ -1899,6 +1914,7 @@
       video.addEventListener('ended', stopProgressLoop);
 
       video.addEventListener('seeking', function () {
+        if (inResume) return;
         if (blockSeek && video.currentTime > maxWatchedTime + 1.0) {
           video.currentTime = maxWatchedTime;
         }

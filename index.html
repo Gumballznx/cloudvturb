@@ -7082,7 +7082,6 @@ if (window.__initialRoute && document.getElementById('pageTitleLabel')) document
                 <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
               </svg>
               <h1 style="font-size: 20px; font-weight: 700; color: var(--text-main); margin: 0;" id="storageSectionTitle">Armazenamento</h1>
-              <span id="storageScopeBadge" class="badge-status" style="background: rgba(37,99,235,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.25);">Servidor</span>
             </div>
             <p style="font-size: 13px; color: var(--text-muted); margin: 0;" id="storageSectionSubtitle">Gerencie a cota de disco e visualize o consumo detalhado por vídeo.</p>
           </div>
@@ -11068,7 +11067,7 @@ webhook-signature: whsec_exemplo_assinatura_secreta_aqui</pre>
       if (titleEl) titleEl.textContent = isOwner ? 'Armazenamento do Servidor' : 'Meu Armazenamento';
 
       const badgeEl = document.getElementById('storageScopeBadge');
-      if (badgeEl) badgeEl.textContent = isOwner ? `Servidor Global (${totalFormatted})` : `Cota Individual (${totalFormatted})`;
+      if (badgeEl) badgeEl.remove();
 
       const cardUsed = document.getElementById('storageCardUsed');
       if (cardUsed) cardUsed.textContent = data.formattedUsage || '0 MB';

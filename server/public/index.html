@@ -5560,6 +5560,581 @@
     .sidebar-upgrade-link:hover {
       text-decoration: underline;
     }
+
+    /* ==========================================================================
+       RESPONSIVIDADE MOBILE APRIMORADA (TELAS, ANALYTICS E ESPAÇAMENTOS)
+       ========================================================================== */
+    @media (max-width: 850px) {
+      /* Espaçamento geral do layout - remover margens excessivas nos lados */
+      .topbar {
+        padding: 0 12px !important;
+        height: 52px !important;
+      }
+      .topbar-left {
+        gap: 10px !important;
+      }
+      .page-title {
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .content-container {
+        padding: 12px 10px !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      .card-panel {
+        padding: 14px 12px !important;
+        margin-bottom: 14px !important;
+        border-radius: 10px !important;
+      }
+      .panel-header {
+        margin-bottom: 12px !important;
+        gap: 10px !important;
+      }
+      .panel-title {
+        font-size: 15px !important;
+      }
+
+      /* Grids de métricas (Cards KPI) em 2 colunas compactas no mobile */
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+        margin-bottom: 16px !important;
+      }
+      .metric-card {
+        padding: 12px 10px !important;
+        border-radius: 10px !important;
+      }
+      .metric-header {
+        margin-bottom: 8px !important;
+      }
+      .metric-title {
+        font-size: 11px !important;
+        line-height: 1.25 !important;
+      }
+      .metric-value {
+        font-size: 18px !important;
+        letter-spacing: -0.3px !important;
+      }
+      .metric-sub {
+        font-size: 10px !important;
+        margin-top: 3px !important;
+      }
+      .metric-icon-box {
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 6px !important;
+      }
+      .metric-icon-box svg {
+        width: 14px !important;
+        height: 14px !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         ANALYTICS DO VÍDEO (#viewVideoAnalytics / .va-layout / .va-sidebar)
+         Transformar barra lateral em navegação superior horizontal com pills
+         ------------------------------------------------------------------------ */
+      #viewVideoAnalytics {
+        margin: -12px -10px !important;
+      }
+      .va-layout {
+        flex-direction: column !important;
+        min-height: auto !important;
+        width: 100% !important;
+        border: none !important;
+        border-radius: 0 !important;
+        background: var(--bg-main) !important;
+      }
+      .va-sidebar {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+        padding: 8px 10px !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 6px !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        background: var(--bg-card) !important;
+        box-sizing: border-box !important;
+      }
+      .va-sidebar::-webkit-scrollbar {
+        display: none !important;
+      }
+      .va-back-btn {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        flex-shrink: 0 !important;
+        border-radius: 9999px !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid var(--border-subtle) !important;
+        color: var(--text-main) !important;
+        margin: 0 !important;
+      }
+      .va-sidebar-title,
+      .va-sidebar-divider {
+        display: none !important;
+      }
+      .va-sidebar-link {
+        width: auto !important;
+        flex-shrink: 0 !important;
+        border-radius: 9999px !important;
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        background: var(--bg-surface) !important;
+        border: 1px solid var(--border-subtle) !important;
+        color: var(--text-muted) !important;
+        margin: 0 !important;
+      }
+      .va-sidebar-link:hover {
+        background: var(--bg-hover) !important;
+        color: var(--text-main) !important;
+      }
+      .va-sidebar-link.active {
+        background: var(--primary) !important;
+        color: #ffffff !important;
+        border-color: var(--primary) !important;
+        font-weight: 700 !important;
+      }
+      .va-sidebar-reset {
+        width: auto !important;
+        flex-shrink: 0 !important;
+        border-radius: 9999px !important;
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+        border: 1px solid rgba(239, 68, 68, 0.25) !important;
+        background: rgba(239, 68, 68, 0.06) !important;
+        color: #ef4444 !important;
+        margin: 0 !important;
+      }
+      .va-content {
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+      .va-header {
+        padding: 10px 12px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+        background: var(--bg-card) !important;
+      }
+      .va-header-title {
+        max-width: 100% !important;
+        font-size: 14px !important;
+      }
+      .va-header-controls {
+        width: 100% !important;
+        display: flex !important;
+        gap: 8px !important;
+      }
+      #vaPeriodSelector {
+        flex: 1 !important;
+        width: 100% !important;
+        font-size: 12px !important;
+        padding: 6px 8px !important;
+      }
+      #vaCustomRange {
+        flex-wrap: wrap !important;
+        width: 100% !important;
+      }
+      .va-body {
+        padding: 12px 10px !important;
+        overflow-x: hidden !important;
+      }
+      .va-subtab-bar {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        gap: 4px !important;
+        margin-bottom: 14px !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+        padding-bottom: 2px !important;
+      }
+      .va-subtab-bar::-webkit-scrollbar {
+        display: none !important;
+      }
+      .va-subtab-btn {
+        flex-shrink: 0 !important;
+        padding: 7px 12px !important;
+        font-size: 12px !important;
+      }
+      .va-retention-chart-box {
+        height: 250px !important;
+        margin-bottom: 14px !important;
+        border-radius: 10px !important;
+      }
+      .va-retention-grid-overlay {
+        padding: 12px 8px 22px 30px !important;
+      }
+      .va-retention-grid-label {
+        left: 4px !important;
+        font-size: 9.5px !important;
+      }
+      .va-retention-time-axis {
+        left: 30px !important;
+        right: 8px !important;
+        font-size: 9.5px !important;
+      }
+      .va-retention-toolbar {
+        margin-bottom: 12px !important;
+        gap: 8px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+      }
+      .va-toolbar-group {
+        display: flex !important;
+        gap: 6px !important;
+        width: 100% !important;
+        flex-wrap: wrap !important;
+      }
+      .va-pill-btn {
+        padding: 6px 10px !important;
+        font-size: 11.5px !important;
+      }
+      .va-content .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+        margin-bottom: 14px !important;
+      }
+      .va-content .metric-card {
+        padding: 10px 10px !important;
+      }
+      .va-content .metric-title {
+        font-size: 10.5px !important;
+      }
+      .va-content .metric-value {
+        font-size: 17px !important;
+      }
+      .va-content .metric-sub {
+        font-size: 10px !important;
+      }
+      .va-funnel-card {
+        padding: 12px 10px !important;
+        border-radius: 10px !important;
+      }
+      .va-funnel-topbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+        margin-bottom: 12px !important;
+      }
+      .va-funnel-chart-container {
+        height: 240px !important;
+      }
+      .va-funnel-y-axis {
+        width: 28px !important;
+        padding-right: 4px !important;
+        font-size: 9px !important;
+        height: 170px !important;
+      }
+      .va-funnel-chart-stage {
+        height: 170px !important;
+      }
+      .va-funnel-bar-track {
+        width: 32px !important;
+        max-width: 86% !important;
+      }
+      .va-funnel-pill {
+        padding: 2px 4px !important;
+        font-size: 9px !important;
+        margin-bottom: 4px !important;
+      }
+      .va-funnel-labels-row {
+        margin-left: 28px !important;
+        padding-top: 6px !important;
+      }
+      .va-funnel-label-col {
+        font-size: 9px !important;
+        padding: 0 1px !important;
+      }
+      .va-summary-toolbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+      }
+      .va-summary-legend {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        padding-bottom: 4px !important;
+      }
+      .va-summary-kpis-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+      }
+      .va-summary-kpi-card {
+        padding: 10px 10px !important;
+      }
+      .va-summary-kpi-value {
+        font-size: 16px !important;
+      }
+      .va-summary-table-card {
+        padding: 12px 8px !important;
+        border-radius: 10px !important;
+      }
+      .va-heatmap-card {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 12px 8px !important;
+      }
+      .va-heatmap-grid {
+        min-width: 480px !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         ANALYTICS GERAL (#viewAnalytics)
+         ------------------------------------------------------------------------ */
+      #viewAnalytics .panel-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+      }
+      #analyticsVideoSelector {
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+      #viewAnalytics .filter-bar {
+        width: 100% !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+      }
+      #analyticsPeriodSelector {
+        width: 100% !important;
+      }
+      #viewAnalytics .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+        margin-bottom: 14px !important;
+      }
+      .analytics-subtabs-nav {
+        display: flex !important;
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        gap: 3px !important;
+        width: 100% !important;
+        scrollbar-width: none !important;
+      }
+      .analytics-subtab-btn {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        padding: 6px 10px !important;
+        font-size: 11.5px !important;
+      }
+      .retention-chart-container {
+        padding: 12px 8px !important;
+        margin-top: 12px !important;
+        border-radius: 10px !important;
+      }
+      .retention-bars-row {
+        gap: 4px !important;
+        height: 160px !important;
+        padding-top: 10px !important;
+      }
+      #analyticsActionButtonsPanel {
+        padding: 12px 10px !important;
+        margin-top: 14px !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         BIBLIOTECA DE VÍDEOS (#viewVideos)
+         ------------------------------------------------------------------------ */
+      .library-nav-tabs {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        gap: 4px !important;
+        margin-bottom: 12px !important;
+        scrollbar-width: none !important;
+      }
+      .library-tab-btn {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        padding: 7px 12px !important;
+        font-size: 12px !important;
+      }
+      #libPaneFiles > div:first-child {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+      }
+      #libPaneFiles > div:first-child > div:last-child {
+        display: flex !important;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+      #libPaneFiles > div:first-child > div:last-child button {
+        flex: 1 !important;
+        justify-content: center !important;
+        font-size: 12px !important;
+        padding: 8px 10px !important;
+      }
+      #videosFilterCardPanel {
+        padding: 10px 8px !important;
+        margin-bottom: 12px !important;
+      }
+      #videosFilterCardPanel .filter-bar {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        gap: 8px !important;
+      }
+      #videosFilterCardPanel .search-input-box {
+        width: 100% !important;
+      }
+      #videosFilterCardPanel .select-filter {
+        width: 100% !important;
+      }
+      .view-control-toolbar {
+        width: 100% !important;
+        justify-content: space-between !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         CONFIGURAÇÕES E PERFIL (#viewSettings)
+         ------------------------------------------------------------------------ */
+      .settings-top-nav {
+        padding-bottom: 10px !important;
+        margin-bottom: 14px !important;
+        gap: 8px !important;
+      }
+      .settings-nav-title {
+        font-size: 17px !important;
+      }
+      .settings-tabs-list {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        gap: 4px !important;
+        padding-bottom: 4px !important;
+        width: 100% !important;
+        scrollbar-width: none !important;
+      }
+      .settings-tab-btn {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+      }
+      #profileAvatarDropzone {
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        gap: 10px !important;
+        padding: 8px 4px !important;
+      }
+      #profileAvatarDropzone > div:last-child > div:first-child {
+        justify-content: center !important;
+        width: 100% !important;
+      }
+      #settingsPaneAccount div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        margin-bottom: 12px !important;
+      }
+      #btnSaveProfileInfo {
+        width: 100% !important;
+        padding: 9px !important;
+        font-size: 13px !important;
+      }
+      .settings-sec-row {
+        padding: 12px 12px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+      }
+      .settings-sec-row button {
+        width: 100% !important;
+        justify-content: center !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         GESTÃO DE USUÁRIOS (#viewUsers)
+         ------------------------------------------------------------------------ */
+      #viewUsers .panel-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+      }
+      #usersStatsContainer {
+        width: 100% !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+      }
+      #btnRefreshUsers {
+        width: 100% !important;
+        justify-content: center !important;
+      }
+      #btnApproveAllUsers {
+        width: 100% !important;
+        justify-content: center !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         ARMAZENAMENTO / SERVIDOR (#viewStorage)
+         ------------------------------------------------------------------------ */
+      #viewStorage > div:first-child {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+        margin-bottom: 14px !important;
+      }
+      #viewStorage > div:first-child button {
+        width: 100% !important;
+        justify-content: center !important;
+      }
+
+      /* ------------------------------------------------------------------------
+         TABELAS E MODAIS RESPONSIVOS
+         ------------------------------------------------------------------------ */
+      .table-responsive {
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+      .dark-table th,
+      .dark-table td {
+        padding: 8px 10px !important;
+        font-size: 12px !important;
+        white-space: nowrap !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .content-container {
+        padding: 10px 8px !important;
+      }
+      #viewVideoAnalytics {
+        margin: -10px -8px !important;
+      }
+      .card-panel {
+        padding: 12px 8px !important;
+      }
+      .metrics-grid {
+        gap: 6px !important;
+      }
+      .metric-card {
+        padding: 10px 8px !important;
+      }
+      .metric-value {
+        font-size: 16px !important;
+      }
+    }
 </style>
 </head>
 <body>

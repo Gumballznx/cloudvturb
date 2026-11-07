@@ -1347,11 +1347,39 @@ function getSystemFromEmail() {
   return `${APP_NAME} <nao-responda@${domain}>`;
 }
 
+function getSystemLogoUrl() {
+  const custom = (process.env.APP_LOGO_URL || '').trim();
+  if (custom) return custom;
+  const host = (DASH_DOMAIN || BASE_DOMAIN || '').trim();
+  if (host) {
+    const proto = (host.startsWith('http://') || host.startsWith('https://')) ? '' : 'https://';
+    return `${proto}${host}/logo-120x120.png`;
+  }
+  return 'https://cloudvturb.com/logo-120x120.png';
+}
+
+function getEmailBrandHeader() {
+  const logoUrl = getSystemLogoUrl();
+  return `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:24px;">
+      <tr>
+        <td style="vertical-align:middle;padding-right:12px;">
+          <img src="${logoUrl}" alt="${escapeHtml(APP_NAME)}" width="40" height="40" style="display:block;width:40px;height:40px;border-radius:10px;border:0;outline:none;" />
+        </td>
+        <td style="vertical-align:middle;">
+          <span style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1;">
+            Cloud<span style="color:#2563eb;">VTurb</span>
+          </span>
+        </td>
+      </tr>
+    </table>`;
+}
+
 async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   const apiKey = (process.env.RESEND_API_KEY || '').trim();
   if (!apiKey) return;
 
   const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
 
   const labels = {
     approve: { subject: 'Sua conta foi aprovada! Bem-vindo ao CloudVTurb', title: 'Conta Aprovada!', color: '#10b981', desc: 'Parabéns! Sua conta na plataforma CloudVTurb foi aprovada pelo Administrador. Você já pode fazer login e acessar todos os recursos para hospedar suas VSLs de alta retenção.' },
@@ -1369,7 +1397,7 @@ async function sendUserActionEmail({ to, name, action, reason, adminName }) {
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${info.title}</title></head>
 <body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
   <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="font-size:22px;font-weight:800;color:#2563eb;margin-bottom:20px;letter-spacing:-0.5px;">CloudVTurb</div>
+    ${brandHeader}
     <h2 style="font-size:18px;font-weight:700;color:#09090b;margin:0 0 12px 0;">${info.title}</h2>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Ola${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 24px 0;">${info.desc}</p>
@@ -1733,6 +1761,7 @@ async function sendVerificationEmail({ to, code, type, name }) {
   }
 
   const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
   const isRegister = type === 'register';
   const isChangePassword = type === 'change_password';
   const subject = isRegister
@@ -1759,7 +1788,7 @@ async function sendVerificationEmail({ to, code, type, name }) {
 </head>
 <body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
   <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="font-size:22px;font-weight:800;color:#2563eb;margin-bottom:20px;letter-spacing:-0.5px;">CloudVTurb</div>
+    ${brandHeader}
     <h2 style="font-size:18px;font-weight:700;color:#09090b;margin:0 0 12px 0;">${title}</h2>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Olá${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 24px 0;">${description}</p>
@@ -1804,6 +1833,7 @@ async function sendInviteEmail({ to, name, inviterName, inviteLink, role }) {
   }
 
   const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
   const roleLabel = role === 'admin' ? 'Administrador' : 'Usuário Comum';
   const subject = `${inviterName || 'Alguém'} convidou você para fazer parte da equipe no CloudVTurb`;
 
@@ -1816,7 +1846,7 @@ async function sendInviteEmail({ to, name, inviterName, inviteLink, role }) {
 </head>
 <body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
   <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:36px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="font-size:22px;font-weight:800;color:#2563eb;margin-bottom:24px;letter-spacing:-0.5px;">CloudVTurb</div>
+    ${brandHeader}
     <h2 style="font-size:19px;font-weight:700;color:#09090b;margin:0 0 14px 0;">Você recebeu um convite para a equipe</h2>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Olá${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
     <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 20px 0;">
@@ -1870,6 +1900,7 @@ async function sendVideoModerationEmail({ to, name, videoTitle, action, reason }
   }
 
   const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
 
   let subject = '';
   let actionTitle = '';
@@ -1902,7 +1933,7 @@ async function sendVideoModerationEmail({ to, name, videoTitle, action, reason }
 </head>
 <body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
   <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:36px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="font-size:22px;font-weight:800;color:#2563eb;margin-bottom:24px;letter-spacing:-0.5px;">CloudVTurb</div>
+    ${brandHeader}
     <div style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;color:${badgeColor};background:${badgeBg};margin-bottom:16px;">
       ${escapeHtml(actionTitle)}
     </div>
@@ -1943,6 +1974,167 @@ async function sendVideoModerationEmail({ to, name, videoTitle, action, reason }
     throw new Error(`Falha no envio via Resend: ${detail}`);
   }
   return resJson;
+}
+
+async function sendWelcomeEmail({ to, name, role }) {
+  const apiKey = (process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) {
+    console.log(`[CloudVTurb Welcome Email] Boas-vindas para ${to} (${role || 'member'})`);
+    return;
+  }
+
+  const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
+  const loginUrl = DASH_DOMAIN ? `https://${DASH_DOMAIN}/login` : '/login';
+  const roleLabel = role === 'owner' ? 'Administrador da Organização' : 'Membro';
+
+  const subject = `Bem-vindo(a) ao CloudVTurb! Sua conta foi ativada`;
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bem-vindo(a) ao CloudVTurb</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:36px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    ${brandHeader}
+    <div style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#16a34a;background:#dcfce7;margin-bottom:16px;">
+      Conta Ativada com Sucesso
+    </div>
+    <h2 style="font-size:20px;font-weight:700;color:#09090b;margin:0 0 14px 0;">Sua jornada com VSLs de alta retenção começa agora</h2>
+    <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Olá${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
+    <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 20px 0;">
+      Seu cadastro foi realizado com sucesso e sua conta de <strong>${escapeHtml(roleLabel)}</strong> já está pronta para uso imediato! Você agora tem acesso total à nossa infraestrutura otimizada para hospedar, proteger e escalar seus vídeos de vendas.
+    </p>
+
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 20px;margin:20px 0 24px 0;">
+      <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;">Recursos inclusos no seu painel:</div>
+      <table cellpadding="0" cellspacing="0" border="0" style="width:100%;font-size:13px;color:#475569;line-height:1.8;">
+        <tr><td style="padding:2px 0;">⚡ <strong>Streaming HLS Ultrarrápido:</strong> Carregamento instantâneo sem buffering.</td></tr>
+        <tr><td style="padding:2px 0;">🔒 <strong>Proteção Anti-Download:</strong> Vídeos protegidos contra clonagem e downloads.</td></tr>
+        <tr><td style="padding:2px 0;">📊 <strong>Analytics de Retenção:</strong> Acompanhe segundo a segundo o engajamento.</td></tr>
+        <tr><td style="padding:2px 0;">🎨 <strong>Player Turbo Customizável:</strong> Botões inteligentes, CTAs cronometrados e autoplay.</td></tr>
+      </table>
+    </div>
+
+    <div style="text-align:center;margin:28px 0 24px 0;">
+      <a href="${loginUrl}" style="display:inline-block;background-color:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:12px 32px;border-radius:8px;box-shadow:0 1px 3px rgba(37,99,235,0.3);">Acessar Meu Painel &rarr;</a>
+    </div>
+
+    <p style="font-size:13px;line-height:1.5;color:#71717a;margin:20px 0 24px 0;">
+      Se precisar de qualquer ajuda durante a configuração inicial, conte com nossa equipe e canais de documentação.
+    </p>
+    <div style="font-size:12px;color:#a1a1aa;border-top:1px solid #f4f4f5;padding-top:16px;">CloudVTurb — Plataforma de Hospedagem VSL de Alta Retenção</div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [to],
+        subject: subject,
+        html: html
+      })
+    });
+    const resJson = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = resJson.message || resJson.error || response.statusText || 'Erro desconhecido';
+      console.error('[CloudVTurb Welcome Email] Falha no Resend:', detail);
+    }
+    return resJson;
+  } catch (err) {
+    console.error('[CloudVTurb Welcome Email] Erro de rede/envio:', err.message);
+  }
+}
+
+async function sendPendingApprovalEmail({ to, name }) {
+  const apiKey = (process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) {
+    console.log(`[CloudVTurb Pending Approval Email] Cadastro em revisão para ${to}`);
+    return;
+  }
+
+  const fromEmail = getSystemFromEmail();
+  const brandHeader = getEmailBrandHeader();
+
+  const subject = `Cadastro recebido — Sua conta está em análise | CloudVTurb`;
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cadastro em Análise — CloudVTurb</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:36px;border:1px solid #e4e4e7;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    ${brandHeader}
+    <div style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#b45309;background:#fef3c7;margin-bottom:16px;">
+      Cadastro Enviado para Revisão
+    </div>
+    <h2 style="font-size:20px;font-weight:700;color:#09090b;margin:0 0 14px 0;">Recebemos a sua solicitação de cadastro</h2>
+    <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 16px 0;">Olá${name ? ` <strong>${escapeHtml(name)}</strong>` : ''},</p>
+    <p style="font-size:14px;line-height:1.6;color:#52525b;margin:0 0 20px 0;">
+      Agradecemos seu interesse na plataforma <strong>CloudVTurb</strong>! Seus dados foram confirmados com sucesso e agora sua conta foi encaminhada para a <strong>revisão prévia do Administrador</strong>.
+    </p>
+
+    <div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;padding:16px;margin:20px 0 24px 0;">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">Por que meu cadastro está em análise?</div>
+      <div style="font-size:13px;line-height:1.6;color:#78350f;">
+        A organização mantém o controle de acesso por aprovação ativa para garantir a segurança, integridade dos recursos e controle rigoroso de novos membros.
+      </div>
+    </div>
+
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:24px;">
+      <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">O que acontece a seguir?</div>
+      <p style="font-size:13px;line-height:1.6;color:#64748b;margin:0 0 8px 0;">
+        &bull; <strong>Você não precisa fazer nada agora:</strong> A moderação já foi notificada sobre sua solicitação.
+      </p>
+      <p style="font-size:13px;line-height:1.6;color:#64748b;margin:0;">
+        &bull; <strong>Notificação imediata:</strong> Assim que a sua conta for aprovada, você receberá automaticamente um novo e-mail com a liberação de acesso.
+      </p>
+    </div>
+
+    <p style="font-size:13px;line-height:1.5;color:#71717a;margin:0 0 24px 0;">
+      Caso tenha dúvidas sobre o status de aprovação, entre em contato diretamente com o administrador ou suporte da plataforma.
+    </p>
+    <div style="font-size:12px;color:#a1a1aa;border-top:1px solid #f4f4f5;padding-top:16px;">CloudVTurb — Plataforma de Hospedagem VSL de Alta Retenção</div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [to],
+        subject: subject,
+        html: html
+      })
+    });
+    const resJson = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = resJson.message || resJson.error || response.statusText || 'Erro desconhecido';
+      console.error('[CloudVTurb Pending Approval Email] Falha no Resend:', detail);
+    }
+    return resJson;
+  } catch (err) {
+    console.error('[CloudVTurb Pending Approval Email] Erro de rede/envio:', err.message);
+  }
 }
 
 app.post('/api/auth/register', async (req, res) => {
@@ -2067,6 +2259,10 @@ app.post('/api/auth/verify-register', async (req, res) => {
       VALUES (?, ?, ?, 'owner', 'approved', ?)
     `).run(payload.name, cleanEmail, payload.passwordHash, nowIso);
 
+    sendWelcomeEmail({ to: cleanEmail, name: payload.name, role: 'owner' }).catch(err => {
+      console.error('[CloudVTurb Welcome Email Error]:', err.message);
+    });
+
     const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'owner', token_version: 1 }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({
       success: true,
@@ -2085,12 +2281,20 @@ app.post('/api/auth/verify-register', async (req, res) => {
   `).run(payload.name, cleanEmail, payload.passwordHash, initialStatus, nowIso);
 
   if (initialStatus === 'pending') {
+    sendPendingApprovalEmail({ to: cleanEmail, name: payload.name }).catch(err => {
+      console.error('[CloudVTurb Pending Approval Email Error]:', err.message);
+    });
+
     return res.json({
       success: true,
       pendingApproval: true,
       message: 'Cadastro confirmado! Aguarde a aprovação do Administrador para acessar a plataforma.'
     });
   } else {
+    sendWelcomeEmail({ to: cleanEmail, name: payload.name, role: 'member' }).catch(err => {
+      console.error('[CloudVTurb Welcome Email Error]:', err.message);
+    });
+
     const token = jwt.sign({ id: info.lastInsertRowid, email: cleanEmail, role: 'member', token_version: 1 }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({
       success: true,
@@ -2430,10 +2634,17 @@ app.post('/api/auth/google', async (req, res) => {
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
 
     if (status === 'pending') {
+      sendPendingApprovalEmail({ to: cleanEmail, name }).catch(err => {
+        console.error('[CloudVTurb Google Pending Approval Email Error]:', err.message);
+      });
       return res.json({
         success: true,
         pendingApproval: true,
         message: 'Cadastro realizado via Google! Aguarde a aprovação do Administrador para acessar a plataforma.'
+      });
+    } else {
+      sendWelcomeEmail({ to: cleanEmail, name, role }).catch(err => {
+        console.error('[CloudVTurb Google Welcome Email Error]:', err.message);
       });
     }
   } else {

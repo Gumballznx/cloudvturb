@@ -66,6 +66,17 @@ const DASH_DOMAIN = (process.env.DASH_DOMAIN || (BASE_DOMAIN ? `dash.${BASE_DOMA
 const HELP_DOMAIN = (process.env.HELP_DOMAIN || (BASE_DOMAIN ? `help.${BASE_DOMAIN}` : '')).toLowerCase();
 const DOCS_DOMAIN = (process.env.DOCS_DOMAIN || (BASE_DOMAIN ? `docs.${BASE_DOMAIN}` : '')).toLowerCase();
 
+// Dominios de midia (opcionais), no mesmo modelo da VTurb:
+//   cdn.<MEDIA_BASE_DOMAIN>     -> videos HLS / mp4 (dominio publico do bucket R2)
+//   scripts.<MEDIA_BASE_DOMAIN> -> player.js / sdk.js
+//   images.<MEDIA_BASE_DOMAIN>  -> posters e thumbnails
+// Quem tem um dominio so pode deixar tudo vazio: o sistema usa o dominio do player.
+const cleanDomain = (value) => String(value || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+const MEDIA_BASE_DOMAIN = cleanDomain(process.env.MEDIA_BASE_DOMAIN);
+const CDN_DOMAIN = cleanDomain(process.env.CDN_DOMAIN) || (MEDIA_BASE_DOMAIN ? `cdn.${MEDIA_BASE_DOMAIN}` : '');
+const SCRIPTS_DOMAIN = cleanDomain(process.env.SCRIPTS_DOMAIN) || (MEDIA_BASE_DOMAIN ? `scripts.${MEDIA_BASE_DOMAIN}` : '');
+const IMAGES_DOMAIN = cleanDomain(process.env.IMAGES_DOMAIN) || (MEDIA_BASE_DOMAIN ? `images.${MEDIA_BASE_DOMAIN}` : '');
+
 const DATA_DIR = process.env.DATA_DIR || (fs.existsSync(path.join(__dirname, 'data')) ? path.join(__dirname, 'data') : path.join(process.cwd(), 'data'));
 const VIDEOS_DIR = process.env.VIDEOS_DIR || (fs.existsSync(path.join(__dirname, 'videos')) ? path.join(__dirname, 'videos') : path.join(process.cwd(), 'videos'));
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public');
@@ -394,6 +405,10 @@ try { db.exec("ALTER TABLE videos ADD COLUMN hls_ready INTEGER DEFAULT 0"); } ca
 try { db.exec("ALTER TABLE videos ADD COLUMN hls_manifest TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN smartautoplay_url TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN hls_failed INTEGER DEFAULT 0"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN storage TEXT DEFAULT 'local'"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN thumbnail TEXT DEFAULT NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN storage_prefix TEXT DEFAULT NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN source_key TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_at DATETIME DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_reason TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN status TEXT DEFAULT 'ready'"); } catch (e) {}
@@ -605,6 +620,99 @@ const rawAllowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
   : [];
 
+// ---------------------------------------------------------------------------
+// Armazenamento (disco local ou bucket S3/R2) e montagem de URLs publicas.
+// ---------------------------------------------------------------------------
+const remoteStorage = require('./storage');
+
+function settingOrEnv(key, envValue) {
+  let value = null;
+  try { value = getSetting(key, null); } catch (e) {}
+  return value !== null && String(value).trim() !== '' ? String(value).trim() : (envValue || '');
+}
+
+function getStorageConfig() {
+  const envDriver = (process.env.STORAGE_DRIVER || 'local').toLowerCase();
+  const rawDriver = settingOrEnv('storage_driver', envDriver === 'r2' || envDriver === 's3' ? 's3_r2' : envDriver);
+  const accountId = (process.env.R2_ACCOUNT_ID || '').trim();
+  const endpoint = settingOrEnv('s3_endpoint', process.env.S3_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : ''));
+  const cfg = {
+    driver: rawDriver === 's3_r2' ? 's3_r2' : 'local',
+    endpoint,
+    region: (process.env.S3_REGION || 'auto').trim(),
+    bucket: settingOrEnv('s3_bucket', process.env.S3_BUCKET || process.env.R2_BUCKET || ''),
+    accessKey: settingOrEnv('s3_access_key', process.env.S3_ACCESS_KEY || process.env.R2_ACCESS_KEY_ID || ''),
+    secretKey: settingOrEnv('s3_secret_key', process.env.S3_SECRET_KEY || process.env.R2_SECRET_ACCESS_KEY || ''),
+    publicUrl: settingOrEnv('s3_public_url', process.env.S3_PUBLIC_URL || (CDN_DOMAIN ? `https://${CDN_DOMAIN}` : '')).replace(/\/+$/, ''),
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true'
+  };
+  cfg.enabled = cfg.driver === 's3_r2' && Boolean(cfg.bucket && cfg.accessKey && cfg.secretKey && cfg.publicUrl);
+  return cfg;
+}
+
+function domainOrigin(domain, req) {
+  if (domain) return `https://${domain}`;
+  if (req) return `${req.protocol}://${req.get('host')}`;
+  return '';
+}
+
+function getPlayerOrigin(req) {
+  return domainOrigin(PLAYER_DOMAIN, req);
+}
+
+function getScriptsOrigin(req) {
+  return domainOrigin(SCRIPTS_DOMAIN || PLAYER_DOMAIN, req);
+}
+
+function getRemoteMediaBase(kind) {
+  const cfg = getStorageConfig();
+  if (kind === 'image' && IMAGES_DOMAIN) return `https://${IMAGES_DOMAIN}`;
+  return cfg.publicUrl || (CDN_DOMAIN ? `https://${CDN_DOMAIN}` : '');
+}
+
+// Converte o caminho guardado no banco em URL publica, conforme onde o arquivo esta.
+// Nada de dominio fica gravado no banco: trocar de dominio nao quebra videos antigos.
+function resolveMediaUrl(video, storedPath, req, kind) {
+  if (!storedPath) return null;
+  const value = String(storedPath);
+  const isLocalSource = !video || !video.source_type || video.source_type === 'local';
+
+  if (/^https?:\/\//i.test(value)) {
+    // URLs antigas gravadas com dominio: reescreve para o dominio atual do player.
+    if (isLocalSource && video && video.storage !== 'r2' && /^https?:\/\/[^/]+\/videos\//i.test(value)) {
+      return value.replace(/^https?:\/\/[^/]+(\/videos\/)/i, `${getPlayerOrigin(req)}$1`);
+    }
+    return value;
+  }
+
+  const rel = value.startsWith('/') ? value : `/${value}`;
+  if (video && video.storage === 'r2') {
+    const base = getRemoteMediaBase(kind);
+    if (base) return `${base}${rel}`;
+  }
+  return `${getPlayerOrigin(req)}${rel}`;
+}
+
+// Campos de midia de um video ja com URLs absolutas, prontos para o navegador.
+function presentVideoMedia(video, req) {
+  if (!video) return {};
+  let settings = {};
+  try { settings = typeof video.settings_json === 'string' ? JSON.parse(video.settings_json || '{}') : (video.settings || {}); } catch (e) {}
+  const out = {
+    video_url: resolveMediaUrl(video, video.video_url, req, 'video'),
+    hls_manifest: video.hls_ready && video.hls_manifest ? resolveMediaUrl(video, video.hls_manifest, req, 'video') : (video.hls_manifest || null),
+    smartautoplay_url: video.smartautoplay_url ? resolveMediaUrl(video, video.smartautoplay_url, req, 'video') : null
+  };
+  if (settings && settings.thumbnailUrl) {
+    out.poster_url = settings.thumbnailUrl;
+  } else if (video.storage === 'r2' && video.thumbnail) {
+    out.poster_url = resolveMediaUrl(video, video.thumbnail, req, 'image');
+  } else if (video.id) {
+    out.poster_url = `${getPlayerOrigin(req)}/videos/${video.id}/poster.jpg`;
+  }
+  return out;
+}
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || NODE_ENV !== 'production' || rawAllowedOrigins.length === 0 || rawAllowedOrigins.includes('*')) {
@@ -615,6 +723,9 @@ const corsOptions = {
       `https://${PLAYER_DOMAIN}`,
       `https://${DASH_DOMAIN}`,
       `https://${BASE_DOMAIN}`,
+      `https://${SCRIPTS_DOMAIN}`,
+      `https://${CDN_DOMAIN}`,
+      `https://${IMAGES_DOMAIN}`,
       `http://${PLAYER_DOMAIN}`,
       `http://${DASH_DOMAIN}`,
       `http://${BASE_DOMAIN}`
@@ -640,7 +751,28 @@ app.get(['/favicon.ico', '/favicon.svg'], (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'));
 });
 
+const PLAYER_SCRIPT_PATHS = ['/player.js', '/sdk.js', '/v1/player.js', '/v1/sdk.js'];
+
+function isPlayerScriptPath(p) {
+  return PLAYER_SCRIPT_PATHS.includes(p) || p.endsWith('/sdk.js');
+}
+
+let playerScriptCache = null;
+function getPlayerScriptSource() {
+  if (playerScriptCache === null || NODE_ENV !== 'production') {
+    const raw = fs.readFileSync(path.join(PUBLIC_DIR, 'player.js'), 'utf8');
+    const playerOrigin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : '';
+    playerScriptCache = raw.replace('__CLOUDVTURB_PLAYER_ORIGIN__', playerOrigin);
+  }
+  return playerScriptCache;
+}
+
 app.use((req, res, next) => {
+  const reqHost = (req.headers.host || '').toLowerCase();
+  // scripts.<dominio> so entrega os scripts do player (e o hls.js).
+  if (SCRIPTS_DOMAIN && reqHost === SCRIPTS_DOMAIN && !isPlayerScriptPath(req.path) && !req.path.startsWith('/js/')) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
   if (req.path === '/analytics-api' || req.path.startsWith('/analytics-api/')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -733,13 +865,15 @@ app.use((req, res, next) => {
     return res.sendFile(path.join(PUBLIC_DIR, 'player.html'));
   }
 
-  if (req.path === '/player.js' || req.path === '/sdk.js' || req.path.endsWith('/sdk.js')) {
+  if (isPlayerScriptPath(req.path)) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    return res.sendFile(path.join(PUBLIC_DIR, 'player.js'));
+    // Navegador guarda 5 min; a Cloudflare guarda 1 dia e e limpa a cada deploy
+    // (boot do servidor), quando o token da Cloudflare esta configurado.
+    res.setHeader('Cache-Control', CLOUDFLARE_API_TOKEN
+      ? 'public, max-age=300, s-maxage=86400'
+      : 'public, max-age=300');
+    return res.send(getPlayerScriptSource());
   }
 
   next();
@@ -760,10 +894,13 @@ app.get(['/avatars/:filename', '/api/avatars/:filename'], (req, res) => {
   if (fs.existsSync(p2)) return res.sendFile(p2);
   res.status(404).send('Avatar não encontrado');
 });
+// Bibliotecas estaticas (hls.js) podem ficar em cache por 7 dias.
+app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), { maxAge: '7d' }));
 app.use(express.static(PUBLIC_DIR));
 
 function getUsedStorageBytes() {
   try {
+    if (getStorageConfig().enabled) return getTotalVideosStorageBytes();
     let total = 0;
     const files = fs.readdirSync(VIDEOS_DIR);
     for (const f of files) {
@@ -895,6 +1032,9 @@ const activeProcessingVids = new Set();
 const hlsQueue = [];
 let hlsRunning = 0;
 const HLS_CONCURRENCY = Math.max(1, parseInt(process.env.HLS_CONCURRENCY || '1', 10) || 1);
+// veryfast: arquivos menores/melhor qualidade que ultrafast, com custo de CPU moderado.
+const FFMPEG_PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'];
+const FFMPEG_PRESET = FFMPEG_PRESETS.includes((process.env.FFMPEG_PRESET || '').trim()) ? process.env.FFMPEG_PRESET.trim() : 'veryfast';
 
 // Executa um binario (ffmpeg/ffprobe) de forma assincrona, sem bloquear o event loop.
 function runCmd(bin, args, timeoutMs = 60000, captureStdout = false) {
@@ -906,6 +1046,10 @@ function runCmd(bin, args, timeoutMs = 60000, captureStdout = false) {
       proc = spawn(bin, args, { stdio: ['ignore', captureStdout ? 'pipe' : 'ignore', 'ignore'] });
     } catch (e) {
       return resolve({ code: -1, stdout: '' });
+    }
+    // ffmpeg com prioridade baixa: o painel e o player continuam rapidos durante a conversao.
+    if (bin === 'ffmpeg' && proc.pid) {
+      try { require('os').setPriority(proc.pid, 10); } catch (_) {}
     }
     const timer = setTimeout(() => {
       try { proc.kill('SIGKILL'); } catch (_) {}
@@ -1064,6 +1208,159 @@ function processVideoHLS(vidId, force = false) {
   pumpHlsQueue();
 }
 
+// ---------------------------------------------------------------------------
+// Publicacao no bucket (R2/S3). Layout das chaves:
+//   videos/<videoId>/<versao>/main.m3u8, video_N.m3u8, *.ts, poster.jpg, smartautoplay-0s.mp4
+//   videos/<videoId>/source/<arquivo original>
+// Cada publicacao usa uma pasta de versao nova, entao tudo pode ter cache
+// "immutable" (inclusive o .m3u8) e reprocessar nunca serve arquivos velhos.
+// ---------------------------------------------------------------------------
+async function publishVideoToRemote(vidId) {
+  const cfg = getStorageConfig();
+  if (!cfg.enabled) return false;
+
+  const v = db.prepare('SELECT * FROM videos WHERE id = ?').get(vidId);
+  if (!v || v.deleted_at) return false;
+
+  const videoDir = path.join(VIDEOS_DIR, vidId);
+  const masterPath = path.join(videoDir, 'main.m3u8');
+  if (!fs.existsSync(masterPath) || !fs.existsSync(path.join(videoDir, 'video_0.m3u8'))) return false;
+
+  const inputPath = findVideoInputPath(v, vidId);
+  const version = 'v' + Date.now().toString(36);
+  const prefix = `videos/${vidId}/${version}`;
+
+  const files = fs.readdirSync(videoDir).filter(f => {
+    if (f.startsWith('.') || f.startsWith('faststart')) return false;
+    const full = path.join(videoDir, f);
+    if (inputPath && path.resolve(full) === path.resolve(inputPath)) return false;
+    try { return fs.statSync(full).isFile(); } catch (e) { return false; }
+  });
+  const rank = (f) => (f === 'main.m3u8' ? 3 : (f.endsWith('.m3u8') ? 2 : 1));
+  files.sort((a, b) => rank(a) - rank(b));
+
+  // Segmentos e imagens primeiro, playlists por ultimo: o master so existe
+  // no bucket quando tudo que ele referencia ja foi enviado.
+  let sourceKey = v.source_key || null;
+  const oldPrefix = v.storage === 'r2' ? v.storage_prefix : null;
+  try {
+    for (const f of files) {
+      await remoteStorage.putFile(cfg, `${prefix}/${f}`, path.join(videoDir, f));
+    }
+
+    if (!sourceKey && inputPath && fs.existsSync(inputPath)) {
+      sourceKey = `videos/${vidId}/source/${path.basename(inputPath)}`;
+      await remoteStorage.putFile(cfg, sourceKey, inputPath);
+    }
+
+    const hasPoster = files.includes('poster.jpg');
+    const hasSmart = files.includes('smartautoplay-0s.mp4');
+
+    db.prepare(`
+      UPDATE videos SET
+        storage = 'r2',
+        storage_prefix = ?,
+        source_key = ?,
+        hls_ready = 1,
+        hls_failed = 0,
+        status = 'ready',
+        optimization_progress = 100,
+        hls_manifest = ?,
+        thumbnail = COALESCE(?, thumbnail),
+        smartautoplay_url = COALESCE(?, smartautoplay_url),
+        video_url = COALESCE(?, video_url)
+      WHERE id = ?
+    `).run(
+      prefix,
+      sourceKey,
+      `/${prefix}/main.m3u8`,
+      hasPoster ? `/${prefix}/poster.jpg` : null,
+      hasSmart ? `/${prefix}/smartautoplay-0s.mp4` : null,
+      sourceKey ? `/${sourceKey}` : null,
+      vidId
+    );
+  } catch (err) {
+    // Envio incompleto: remove a versao parcial para nao deixar lixo no bucket.
+    try { await remoteStorage.deletePrefix(cfg, `${prefix}/`); } catch (_) {}
+    if (sourceKey && !v.source_key) {
+      try { await remoteStorage.deletePrefix(cfg, `videos/${vidId}/source/`); } catch (_) {}
+    }
+    throw err;
+  }
+
+  // A partir daqui o video e servido pelo bucket: libera o disco da VPS.
+  try { fs.rmSync(videoDir, { recursive: true, force: true }); } catch (e) {}
+  if (inputPath && sourceKey && fs.existsSync(inputPath) && !inputPath.startsWith(videoDir + path.sep)) {
+    let sharedLocal = 0;
+    try {
+      sharedLocal = db.prepare("SELECT COUNT(*) AS n FROM videos WHERE id != ? AND file_path = ? AND COALESCE(storage, 'local') != 'r2'").get(vidId, inputPath).n;
+    } catch (e) {}
+    if (!sharedLocal) {
+      try { fs.unlinkSync(inputPath); } catch (e) {}
+    }
+  }
+  try { db.prepare('UPDATE videos SET file_path = NULL WHERE id = ?').run(vidId); } catch (e) {}
+
+  let oldPrefixShared = 0;
+  if (oldPrefix) {
+    try { oldPrefixShared = db.prepare('SELECT COUNT(*) AS n FROM videos WHERE storage_prefix = ?').get(oldPrefix).n; } catch (e) { oldPrefixShared = 1; }
+  }
+  if (oldPrefix && oldPrefix !== prefix && oldPrefix.startsWith(`videos/${vidId}/`) && !oldPrefixShared) {
+    try { await remoteStorage.deletePrefix(cfg, `${oldPrefix}/`); } catch (e) {
+      console.error(`[Storage] Nao foi possivel apagar a versao antiga ${oldPrefix}:`, e.message);
+    }
+  }
+
+  console.log(`[Storage] Video ${vidId} publicado no bucket em ${prefix}`);
+  return true;
+}
+
+// Baixa o mp4 original do bucket quando ele nao existe mais no disco (reprocessar).
+async function ensureLocalSource(v, vidId) {
+  const cfg = getStorageConfig();
+  if (!cfg.enabled || !v.source_key) return null;
+  const videoDir = path.join(VIDEOS_DIR, vidId);
+  if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+  const dest = path.join(videoDir, path.basename(v.source_key));
+  if (!fs.existsSync(dest)) {
+    await remoteStorage.downloadFile(cfg, v.source_key, dest);
+  }
+  try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(dest, vidId); } catch (e) {}
+  return dest;
+}
+
+async function deleteVideoFromRemote(video) {
+  if (!video || video.storage !== 'r2') return;
+  const cfg = getStorageConfig();
+  if (!cfg.bucket || !cfg.accessKey || !cfg.secretKey) return;
+
+  // Pastas que este video usa: a dele e, se for uma copia, a do video original.
+  const folders = new Set([`videos/${path.basename(video.id)}/`]);
+  for (const key of [video.storage_prefix, video.source_key]) {
+    const m = /^videos\/([^/]+)\//.exec(String(key || ''));
+    if (m) folders.add(`videos/${m[1]}/`);
+  }
+
+  for (const folder of folders) {
+    try {
+      // Copias (duplicar video) apontam para os mesmos arquivos: so apaga a
+      // pasta quando nenhum outro video (nem na lixeira) ainda a usa.
+      const shared = db.prepare('SELECT COUNT(*) AS n FROM videos WHERE id != ? AND (storage_prefix LIKE ? OR source_key LIKE ? OR id = ?)')
+        .get(video.id, `${folder}%`, `${folder}%`, folder.split('/')[1]);
+      if (shared && shared.n > 0) {
+        console.log(`[Storage] ${folder} mantido no bucket: ainda usado por outro video.`);
+        continue;
+      }
+      const removed = await remoteStorage.deletePrefix(cfg, folder);
+      console.log(`[Storage] ${removed} arquivo(s) removidos do bucket em ${folder}`);
+    } catch (e) {
+      console.error(`[Storage] Falha ao remover ${folder} do bucket:`, e.message);
+    }
+  }
+  // Limpa de novo depois de apagar, para o cache nao guardar copias durante a exclusao.
+  purgeVideoFromCloudflare(video.id, video);
+}
+
 function pumpHlsQueue() {
   while (hlsRunning < HLS_CONCURRENCY && hlsQueue.length > 0) {
     const job = hlsQueue.shift();
@@ -1086,6 +1383,13 @@ async function runHlsJob(vidId, force) {
   if (!v) return;
 
   let inputPath = findVideoInputPath(v, vidId);
+  if (!inputPath && v.storage === 'r2' && v.source_key) {
+    try {
+      inputPath = await ensureLocalSource(v, vidId);
+    } catch (e) {
+      console.error(`[Storage] Falha ao baixar o original de ${vidId}:`, e.message);
+    }
+  }
   if (!inputPath) {
     markHlsFailed(vidId);
     return;
@@ -1102,6 +1406,7 @@ async function runHlsJob(vidId, force) {
     try {
       db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_failed = 0, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
     } catch (e) {}
+    await publishVideoToRemoteSafe(vidId);
     return;
   }
 
@@ -1211,7 +1516,7 @@ async function runHlsJob(vidId, force) {
     '-b:v:2', '3200k',
     '-maxrate:v:2', '3424k',
     '-bufsize:v:2', '4800k',
-    '-preset', 'ultrafast',
+    '-preset', FFMPEG_PRESET,
     '-pix_fmt', 'yuv420p',
     // Keyframe a cada 4s em todas as rendicoes: segmentos de tamanho fixo e
     // alinhados, permitindo ao hls.js trocar de qualidade sem engasgar.
@@ -1279,16 +1584,33 @@ async function runHlsJob(vidId, force) {
   try {
     db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_failed = 0, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
   } catch (e) {}
+  await publishVideoToRemoteSafe(vidId);
+  let publicManifest = manifestUrl;
+  try {
+    const fresh = db.prepare('SELECT * FROM videos WHERE id = ?').get(vidId);
+    publicManifest = resolveMediaUrl(fresh, fresh.hls_manifest, null, 'video') || manifestUrl;
+  } catch (e) {}
   dispatchWebhookEvent(v.user_id, 'video.ready', {
     video_id: vidId,
     name: v.title || '',
-    hls_manifest: manifestUrl
+    hls_manifest: publicManifest
   });
+}
+
+// Se o envio ao bucket falhar, o video continua funcionando pelo disco local
+// e o envio e tentado de novo no proximo boot.
+async function publishVideoToRemoteSafe(vidId) {
+  try {
+    await publishVideoToRemote(vidId);
+  } catch (e) {
+    console.error(`[Storage] Falha ao publicar ${vidId} no bucket (segue servido pelo disco local):`, e.message);
+  }
 }
 
 function autoCheckPendingHls() {
   try {
-    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest, hls_failed, status, optimization_progress FROM videos WHERE deleted_at IS NULL").all();
+    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest, hls_failed, status, optimization_progress, storage, source_type FROM videos WHERE deleted_at IS NULL").all();
+    const storageCfg = getStorageConfig();
     const posterJobs = [];
     for (const v of allVids) {
       const videoDir = path.join(VIDEOS_DIR, v.id);
@@ -1306,11 +1628,18 @@ function autoCheckPendingHls() {
         }
       } catch (e) {}
 
+      // Ja publicado no bucket: nada a fazer no disco local.
+      if (v.storage === 'r2' && v.hls_ready && v.status !== 'optimizing') continue;
+      // Video externo (URL remota): nao ha arquivo para converter.
+      if (v.source_type && v.source_type !== 'local') continue;
+
       if (fs.existsSync(masterPlaylist) && isMultiRendition) {
         if (!v.hls_ready || v.status === 'optimizing' || v.optimization_progress !== 100) {
           const manifestUrl = `/videos/${v.id}/main.m3u8`;
           db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
         }
+        // Migracao automatica: video pronto no disco e bucket configurado -> envia.
+        if (storageCfg.enabled) processVideoHLS(v.id, false);
         continue;
       }
 
@@ -1322,7 +1651,8 @@ function autoCheckPendingHls() {
     }
 
     for (const v of allVids) {
-      if (activeProcessingVids.has(v.id)) continue;
+      if (activeProcessingVids.has(v.id) || v.storage === 'r2') continue;
+      if (v.source_type && v.source_type !== 'local') continue;
       const videoDir = path.join(VIDEOS_DIR, v.id);
       const posterPath = path.join(videoDir, 'poster.jpg');
       if (fs.existsSync(posterPath)) continue;
@@ -1345,14 +1675,19 @@ function autoCheckPendingHls() {
 }
 
 // ---------------------------------------------------------------------------
-// Purge do cache da Cloudflare (opcional). Configure CLOUDFLARE_ZONE_ID e
-// CLOUDFLARE_API_TOKEN (permissao "Zone > Cache Purge > Purge").
+// Purge do cache da Cloudflare (opcional). Configure CLOUDFLARE_API_TOKEN
+// (permissao "Zone > Cache Purge > Purge") e o ID da zona:
+//   CLOUDFLARE_ZONE_ID        -> zona do dominio principal (ex.: seudominio.com)
+//   CLOUDFLARE_MEDIA_ZONE_ID  -> zona dos dominios de midia, se for outro dominio
+//                                (cdn./scripts./images.). Vazio = mesma zona.
 // ---------------------------------------------------------------------------
 const CLOUDFLARE_ZONE_ID = (process.env.CLOUDFLARE_ZONE_ID || '').trim();
+const CLOUDFLARE_MEDIA_ZONE_ID = (process.env.CLOUDFLARE_MEDIA_ZONE_ID || '').trim() || CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = (process.env.CLOUDFLARE_API_TOKEN || '').trim();
 
-async function cloudflarePurgeRequest(body) {
-  const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(CLOUDFLARE_ZONE_ID)}/purge_cache`, {
+async function cloudflarePurgeRequest(zoneId, body) {
+  if (!zoneId || !CLOUDFLARE_API_TOKEN) return false;
+  const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(zoneId)}/purge_cache`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
@@ -1365,13 +1700,51 @@ async function cloudflarePurgeRequest(body) {
   return Boolean(res.ok && json && json.success);
 }
 
+function hostOfUrl(value) {
+  try { return new URL(value).host.toLowerCase(); } catch (e) { return ''; }
+}
+
+function mediaHosts() {
+  const hosts = [CDN_DOMAIN, IMAGES_DOMAIN, SCRIPTS_DOMAIN];
+  const publicHost = hostOfUrl(getStorageConfig().publicUrl);
+  if (publicHost) hosts.push(publicHost);
+  return Array.from(new Set(hosts.filter(Boolean)));
+}
+
+function zoneForHost(host) {
+  return mediaHosts().includes(host) ? CLOUDFLARE_MEDIA_ZONE_ID : CLOUDFLARE_ZONE_ID;
+}
+
+// Limpa uma lista de URLs e prefixos ("host/caminho/"), agrupando por zona.
+async function purgeCloudflare({ files = [], prefixes = [] }) {
+  if (!CLOUDFLARE_API_TOKEN) return;
+  const byZone = new Map();
+  const add = (zone, type, value) => {
+    if (!zone) return;
+    if (!byZone.has(zone)) byZone.set(zone, { files: [], prefixes: [] });
+    byZone.get(zone)[type].push(value);
+  };
+  for (const f of files) add(zoneForHost(hostOfUrl(f)), 'files', f);
+  for (const p of prefixes) add(zoneForHost(String(p).split('/')[0]), 'prefixes', p);
+
+  for (const [zone, job] of byZone) {
+    // Purge por prefixo (1 chamada); se o plano nao suportar, cai para a lista de URLs.
+    let prefixOk = true;
+    if (job.prefixes.length) prefixOk = await cloudflarePurgeRequest(zone, { prefixes: job.prefixes });
+    const covered = (u) => prefixOk && job.prefixes.some(p => u.replace(/^https?:\/\//, '').startsWith(p));
+    const list = job.files.filter(u => !covered(u));
+    for (let i = 0; i < list.length; i += 30) {
+      await cloudflarePurgeRequest(zone, { files: list.slice(i, i + 30) });
+    }
+  }
+}
+
 // Deve ser chamada ANTES de apagar os arquivos do disco (lista os arquivos da pasta).
 function purgeVideoFromCloudflare(vidId, videoRow) {
-  if (!CLOUDFLARE_ZONE_ID || !CLOUDFLARE_API_TOKEN || !vidId) return;
+  if (!CLOUDFLARE_API_TOKEN || !vidId) return;
 
-  const hosts = [PLAYER_DOMAIN, DASH_DOMAIN, BASE_DOMAIN].filter(Boolean);
-  if (hosts.length === 0) return;
-  const uniqueHosts = Array.from(new Set(hosts));
+  const localHosts = Array.from(new Set([PLAYER_DOMAIN, DASH_DOMAIN, BASE_DOMAIN].filter(Boolean)));
+  const remoteHosts = mediaHosts().filter(h => h !== SCRIPTS_DOMAIN);
 
   const files = [];
   try {
@@ -1379,32 +1752,24 @@ function purgeVideoFromCloudflare(vidId, videoRow) {
     if (fs.existsSync(videoDir)) {
       for (const f of fs.readdirSync(videoDir)) {
         if (f.startsWith('.')) continue;
-        for (const h of uniqueHosts) files.push(`https://${h}/videos/${vidId}/${f}`);
+        for (const h of localHosts) files.push(`https://${h}/videos/${vidId}/${f}`);
       }
     }
   } catch (e) {}
 
   const videoUrl = videoRow && videoRow.video_url;
-  if (videoUrl && videoUrl.includes('/videos/')) {
+  if (videoUrl && videoUrl.includes('/videos/') && (!videoRow || videoRow.storage !== 'r2')) {
     const fileName = path.basename(videoUrl.split('?')[0]);
-    for (const h of uniqueHosts) files.push(`https://${h}/videos/${fileName}`);
+    for (const h of localHosts) files.push(`https://${h}/videos/${fileName}`);
   }
 
-  const prefixes = uniqueHosts.map(h => `${h}/videos/${vidId}/`);
+  const prefixes = [...localHosts, ...remoteHosts].map(h => `${h}/videos/${vidId}/`);
 
-  (async () => {
-    try {
-      // Purge por prefixo (1 chamada); se o plano nao suportar, cai para a lista de URLs.
-      const prefixOk = await cloudflarePurgeRequest({ prefixes });
-      const toPurge = prefixOk ? files.filter(u => !u.includes(`/videos/${vidId}/`)) : files;
-      for (let i = 0; i < toPurge.length; i += 30) {
-        await cloudflarePurgeRequest({ files: toPurge.slice(i, i + 30) });
-      }
-    } catch (err) {
-      console.error(`[Cloudflare] Falha ao limpar cache do video ${vidId}:`, err && err.message ? err.message : err);
-    }
-  })();
+  purgeCloudflare({ files, prefixes }).catch((err) => {
+    console.error(`[Cloudflare] Falha ao limpar cache do video ${vidId}:`, err && err.message ? err.message : err);
+  });
 }
+
 // Encaminha erros de rotas async para o Express (evita requisição pendurada).
 function asyncRoute(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -1721,6 +2086,9 @@ app.get('/api/config', (req, res) => {
     playerDomain: playerDomain,
     dashDomain: dashDomain,
     docsDomain: docsDomain,
+    scriptsDomain: getScriptsOrigin(req),
+    cdnDomain: getStorageConfig().enabled ? getRemoteMediaBase('video') : playerDomain,
+    imagesDomain: getStorageConfig().enabled ? getRemoteMediaBase('image') : playerDomain,
     cloudHosted: process.env.CLOUD_HOSTED === 'true',
     billingEnabled: process.env.BILLING_ENABLED === 'true'
   });
@@ -3374,7 +3742,7 @@ app.get('/api/admin/settings', authMiddleware, (req, res) => {
   });
 });
 
-app.post('/api/admin/settings', authMiddleware, ownerMiddleware, (req, res) => {
+app.post('/api/admin/settings', authMiddleware, ownerMiddleware, asyncRoute(async (req, res) => {
   const {
     requireApproval,
     serverLimitGb,
@@ -3386,6 +3754,39 @@ app.post('/api/admin/settings', authMiddleware, ownerMiddleware, (req, res) => {
     s3SecretKey,
     s3PublicUrl
   } = req.body;
+
+  // Antes de ativar o bucket, testa as credenciais de verdade (grava/le/apaga
+  // um arquivo). Assim uma chave errada nao derruba os uploads.
+  let storageWarning = '';
+  if (storageDriver === 's3_r2') {
+    const current = getStorageConfig();
+    const pick = (v, fallback) => (v !== undefined && String(v).trim() !== '' && !String(v).includes('••••') ? String(v).trim() : fallback);
+    const candidate = {
+      ...current,
+      driver: 's3_r2',
+      endpoint: pick(s3Endpoint, current.endpoint),
+      bucket: pick(s3Bucket, current.bucket),
+      accessKey: pick(s3AccessKey, current.accessKey),
+      secretKey: pick(s3SecretKey, current.secretKey),
+      publicUrl: pick(s3PublicUrl, current.publicUrl).replace(/\/+$/, '')
+    };
+    if (!candidate.endpoint || !candidate.bucket || !candidate.accessKey || !candidate.secretKey || !candidate.publicUrl) {
+      return res.status(400).json({ error: 'Preencha Endpoint, Bucket, Access Key, Secret Key e a URL pública (ex.: https://cdn.seudominio.com).' });
+    }
+    if (!/^https:\/\//i.test(candidate.publicUrl)) {
+      return res.status(400).json({ error: 'A URL pública precisa começar com https:// (ex.: https://cdn.seudominio.com).' });
+    }
+    try {
+      await remoteStorage.testConnection(candidate);
+    } catch (err) {
+      return res.status(400).json({ error: `Não foi possível acessar o bucket: ${err.name || ''} ${err.message || err}`.trim() });
+    }
+    try {
+      await remoteStorage.ensureBucketCors(candidate);
+    } catch (err) {
+      storageWarning = ' Atenção: não foi possível configurar o CORS do bucket automaticamente (o token precisa de permissão de administrador). Configure manualmente no painel do R2: GET/HEAD liberado para qualquer origem.';
+    }
+  }
 
   if (requireApproval !== undefined) {
     setSetting('require_approval', requireApproval ? '1' : '0');
@@ -3409,10 +3810,17 @@ app.post('/api/admin/settings', authMiddleware, ownerMiddleware, (req, res) => {
   if (s3SecretKey !== undefined && String(s3SecretKey).trim()) {
     setSetting('s3_secret_key', String(s3SecretKey).trim());
   }
-  if (s3PublicUrl !== undefined) setSetting('s3_public_url', String(s3PublicUrl).trim());
+  if (s3PublicUrl !== undefined) setSetting('s3_public_url', String(s3PublicUrl).trim().replace(/\/+$/, ''));
 
-  res.json({ success: true, message: 'Configurações atualizadas com sucesso!' });
-});
+  let migrationMsg = '';
+  if (getStorageConfig().enabled) {
+    // Envia em segundo plano (um por vez) os videos que ainda estao no disco.
+    setTimeout(() => { try { autoCheckPendingHls(); } catch (_) {} }, 500);
+    migrationMsg = ' Os vídeos existentes estão sendo enviados para o bucket em segundo plano.';
+  }
+
+  res.json({ success: true, message: 'Configurações atualizadas com sucesso!' + migrationMsg + storageWarning });
+}));
 
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -4148,7 +4556,7 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
   if (isOwner) {
     rawVideos = db.prepare(`
       SELECT v.id, v.title, v.duration, v.file_size, v.source_type, v.created_at, v.deleted_at,
-             v.blocked_at, v.blocked_reason, v.video_url,
+             v.blocked_at, v.blocked_reason, v.video_url, v.storage, v.thumbnail, v.settings_json,
              v.user_id, u.name as user_name, u.email as user_email, u.role as user_role,
              f.name as folder_name
       FROM videos v
@@ -4160,7 +4568,7 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
   } else {
     rawVideos = db.prepare(`
       SELECT v.id, v.title, v.duration, v.file_size, v.source_type, v.created_at, v.deleted_at,
-             v.blocked_at, v.blocked_reason, v.video_url,
+             v.blocked_at, v.blocked_reason, v.video_url, v.storage, v.thumbnail, v.settings_json,
              v.user_id,
              f.name as folder_name
       FROM videos v
@@ -4180,13 +4588,15 @@ app.get('/api/storage/details', authMiddleware, (req, res) => {
     const rawPct = totalLimitBytes > 0 ? (sizeBytes / totalLimitBytes) * 100 : 0;
     const pctOfTotal = rawPct > 0 && rawPct < 0.01 ? '< 0.01' : rawPct.toFixed(2);
     const pctOfUsed = usedBytes > 0 ? ((sizeBytes / usedBytes) * 100).toFixed(1) : '0.0';
+    const media = presentVideoMedia(v, req);
     return {
       id: v.id,
       title: v.title,
       userId: v.user_id,
-      videoUrl: v.video_url || '',
-      thumbnail: `/videos/${v.id}/poster.jpg`,
-      posterUrl: `/videos/${v.id}/poster.jpg`,
+      videoUrl: media.video_url || '',
+      thumbnail: media.poster_url,
+      posterUrl: media.poster_url,
+      storage: v.storage || 'local',
       isBlocked: !!v.blocked_at,
       blockedAt: v.blocked_at,
       blockedReason: v.blocked_reason,
@@ -4558,7 +4968,8 @@ app.get('/api/videos', authMiddleware, (req, res) => {
     const videos = rows.map(r => {
       let settings = {};
       try { settings = r.settings_json ? JSON.parse(r.settings_json) : {}; } catch (e) {}
-      const posterUrl = settings.thumbnailUrl || `${origin}/videos/${r.id}/poster.jpg`;
+      const media = presentVideoMedia(r, req);
+      const posterUrl = media.poster_url;
       let distinctPlays = r.plays || 0;
       try {
         const pRow = db.prepare("SELECT COUNT(DISTINCT session_id) as count FROM analytics_events WHERE video_id = ? AND event_type = 'play'").get(r.id);
@@ -4583,6 +4994,9 @@ app.get('/api/videos', authMiddleware, (req, res) => {
       }
       return {
         ...r,
+        video_url: media.video_url,
+        hls_manifest: media.hls_manifest,
+        smartautoplay_url: media.smartautoplay_url,
         status: currentStatus,
         optimization_progress: currentProgress,
         plays: distinctPlays,
@@ -4600,12 +5014,13 @@ app.get('/api/videos', authMiddleware, (req, res) => {
 
 app.get('/api/videos/top', authMiddleware, (req, res) => {
   const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
-  const videosQuery = 'SELECT id, title, video_url, duration, plays, settings_json, hls_ready, hls_manifest, created_at FROM videos WHERE deleted_at IS NULL AND user_id = ? ORDER BY plays DESC LIMIT 20';
+  const videosQuery = 'SELECT id, title, video_url, duration, plays, settings_json, hls_ready, hls_manifest, created_at, storage, thumbnail, source_type FROM videos WHERE deleted_at IS NULL AND user_id = ? ORDER BY plays DESC LIMIT 20';
   const rows = db.prepare(videosQuery).all(req.user.id);
   const topVideos = rows.map(v => {
     let settings = {};
     try { if (v.settings_json) settings = JSON.parse(v.settings_json); } catch (e) {}
-    const posterUrl = settings.thumbnailUrl || `${origin}/videos/${v.id}/poster.jpg`;
+    const media = presentVideoMedia(v, req);
+    const posterUrl = media.poster_url;
     const ctaClicks = db.prepare("SELECT COUNT(*) as count FROM analytics_events WHERE video_id = ? AND event_type = 'cta_clicked'").get(v.id).count;
     const completes = db.prepare("SELECT COUNT(DISTINCT session_id) as count FROM analytics_events WHERE video_id = ? AND (event_type = 'complete' OR (event_type = 'progress' AND milestone = 100))").get(v.id).count;
     const completionRate = v.plays > 0 ? ((completes / v.plays) * 100).toFixed(1) : '0.0';
@@ -4614,13 +5029,13 @@ app.get('/api/videos/top', authMiddleware, (req, res) => {
     return {
       id: v.id,
       title: v.title,
-      video_url: v.video_url,
+      video_url: media.video_url,
       poster_url: posterUrl,
       thumbnail: posterUrl,
       duration: v.duration,
       plays: v.plays || 0,
       hls_ready: Boolean(v.hls_ready),
-      hls_manifest: v.hls_manifest || null,
+      hls_manifest: media.hls_manifest || null,
       ctaClicks,
       completes,
       completionRate,
@@ -4633,13 +5048,29 @@ app.get('/api/videos/top', authMiddleware, (req, res) => {
 });
 
 app.post('/api/videos', authMiddleware, asyncRoute(async (req, res) => {
-  const { id, title, videoUrl, sourceType, filePath, duration, settings, fileSize, folderId } = req.body;
+  const { id, title, videoUrl, sourceType, duration, settings, fileSize, folderId } = req.body;
+  let { filePath } = req.body;
 
   if (!videoUrl || typeof videoUrl !== 'string') {
     return res.status(400).json({ error: 'URL do vídeo é obrigatória.' });
   }
 
-  const cleanUrl = videoUrl.trim();
+  // O caminho vem do navegador: so aceita arquivos enviados para a pasta de
+  // videos (nunca o banco de dados ou outros arquivos do servidor).
+  if (filePath) {
+    const resolved = path.resolve(String(filePath));
+    const ext = path.extname(resolved).toLowerCase();
+    if (path.dirname(resolved) !== path.resolve(VIDEOS_DIR) || !ALLOWED_EXTS.includes(ext) || !fs.existsSync(resolved)) {
+      return res.status(400).json({ error: 'Arquivo de vídeo inválido.' });
+    }
+    filePath = resolved;
+  }
+
+  let cleanUrl = videoUrl.trim();
+  if (sourceType === 'local' && filePath) {
+    // Guarda so o caminho; o dominio e montado na hora de entregar.
+    cleanUrl = `/videos/${path.basename(filePath)}`;
+  }
   if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.startsWith('/videos/')) {
     return res.status(400).json({ error: 'URL do vídeo inválida.' });
   }
@@ -4771,11 +5202,20 @@ app.get('/api/videos/:id', authMiddleware, (req, res) => {
   try { settings = v.settings_json ? JSON.parse(v.settings_json) : {}; } catch (e) {}
   const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
   const posterPath = path.join(VIDEOS_DIR, v.id, 'poster.jpg');
-  const posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${v.id}/poster.jpg` : (settings.thumbnailUrl || (v.video_url ? `${v.video_url}#t=0.5` : null));
+  const media = presentVideoMedia(v, req);
+  let posterUrl;
+  if (v.storage === 'r2' || settings.thumbnailUrl) {
+    posterUrl = media.poster_url;
+  } else {
+    posterUrl = fs.existsSync(posterPath) ? `${origin}/videos/${v.id}/poster.jpg` : (media.video_url ? `${media.video_url}#t=0.5` : null);
+  }
 
   res.json({
     video: {
       ...v,
+      video_url: media.video_url,
+      hls_manifest: media.hls_manifest,
+      smartautoplay_url: media.smartautoplay_url,
       settings,
       poster_url: posterUrl,
       thumbnail: posterUrl
@@ -4861,6 +5301,16 @@ app.post('/api/videos/:id/duplicate', authMiddleware, (req, res) => {
     existing.settings_json
   );
 
+  // Video ja no bucket: a copia reaproveita os mesmos arquivos (sem reconverter).
+  if (existing.storage === 'r2') {
+    db.prepare(`
+      UPDATE videos SET storage = 'r2', storage_prefix = ?, source_key = ?, hls_ready = ?, hls_manifest = ?,
+        thumbnail = ?, smartautoplay_url = ?, status = 'ready', optimization_progress = 100
+      WHERE id = ?
+    `).run(existing.storage_prefix, existing.source_key, existing.hls_ready ? 1 : 0, existing.hls_manifest,
+      existing.thumbnail, existing.smartautoplay_url, newId);
+  }
+
   dispatchWebhookEvent(existing.user_id, 'video.created', {
     video_id: newId,
     name: newTitle,
@@ -4937,6 +5387,7 @@ app.delete('/api/videos/:id/permanent', authMiddleware, (req, res) => {
   }
 
   purgeVideoFromCloudflare(vidId, existing);
+  deleteVideoFromRemote(existing);
 
   if (existing.source_type === 'local' && existing.file_path && fs.existsSync(existing.file_path)) {
     try { fs.unlinkSync(existing.file_path); } catch (e) {}
@@ -4955,8 +5406,8 @@ app.delete('/api/videos/:id/permanent', authMiddleware, (req, res) => {
 app.delete('/api/videos/trash/empty', authMiddleware, (req, res) => {
   const isOwner = req.user.role === 'owner';
   const query = isOwner
-    ? 'SELECT id, source_type, file_path, video_url FROM videos WHERE deleted_at IS NOT NULL'
-    : 'SELECT id, source_type, file_path, video_url FROM videos WHERE deleted_at IS NOT NULL AND user_id = ?';
+    ? 'SELECT * FROM videos WHERE deleted_at IS NOT NULL'
+    : 'SELECT * FROM videos WHERE deleted_at IS NOT NULL AND user_id = ?';
   const trashItems = isOwner ? db.prepare(query).all() : db.prepare(query).all(req.user.id);
 
   if (trashItems.length === 0) {
@@ -4965,6 +5416,7 @@ app.delete('/api/videos/trash/empty', authMiddleware, (req, res) => {
 
   for (const item of trashItems) {
     purgeVideoFromCloudflare(item.id, item);
+    deleteVideoFromRemote(item);
     if (item.source_type === 'local' && item.file_path && fs.existsSync(item.file_path)) {
       try { fs.unlinkSync(item.file_path); } catch (e) {}
     }
@@ -5022,6 +5474,7 @@ app.post('/api/videos/:id/moderate', authMiddleware, async (req, res) => {
       db.prepare('UPDATE videos SET blocked_at = NULL, blocked_reason = NULL WHERE id = ?').run(vidId);
     } else if (action === 'delete') {
       purgeVideoFromCloudflare(vidId, video);
+      deleteVideoFromRemote(video);
       if (video.source_type === 'local' && video.file_path && fs.existsSync(video.file_path)) {
         try { fs.unlinkSync(video.file_path); } catch (e) {}
       }
@@ -5069,7 +5522,9 @@ app.post('/api/videos/:id/reprocess', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Permissão negada.' });
   }
 
-  if (!existing.file_path || !fs.existsSync(existing.file_path)) {
+  const hasLocalSource = existing.file_path && fs.existsSync(existing.file_path);
+  const hasRemoteSource = existing.storage === 'r2' && existing.source_key && getStorageConfig().enabled;
+  if (!hasLocalSource && !hasRemoteSource) {
     return res.status(400).json({ error: 'Arquivo fonte não disponível para transcodificação.' });
   }
 
@@ -5100,7 +5555,7 @@ app.post('/api/videos/:id/play', (req, res) => {
 app.get('/api/videos/:id/public', (req, res) => {
   const vidId = req.params.id;
   try {
-    const v = db.prepare('SELECT id, title, video_url, duration, settings_json, hls_ready, hls_manifest, hls_failed, status, optimization_progress, smartautoplay_url, blocked_at, blocked_reason, user_id FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId);
+    const v = db.prepare('SELECT id, title, video_url, duration, settings_json, hls_ready, hls_manifest, hls_failed, status, optimization_progress, smartautoplay_url, thumbnail, storage, source_type, blocked_at, blocked_reason, user_id FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId);
     if (!v) return res.status(404).json({ error: 'Vídeo não encontrado ou indisponível.' });
 
     if (!v.hls_ready) {
@@ -5168,17 +5623,17 @@ app.get('/api/videos/:id/public', (req, res) => {
 
     const origin = PLAYER_DOMAIN ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${req.get('host')}`;
 
-    let videoUrl = v.video_url;
-    if (videoUrl && videoUrl.startsWith('/videos/')) {
-      videoUrl = `${origin}${videoUrl}`;
-    } else if (videoUrl && PLAYER_DOMAIN && videoUrl.includes('/videos/') && !videoUrl.includes(`${PLAYER_DOMAIN}/videos/`)) {
-      videoUrl = videoUrl.replace(/^https?:\/\/[^\/]+(\/videos\/)/, `https://${PLAYER_DOMAIN}$1`);
-    }
+    const media = presentVideoMedia(v, req);
+    let videoUrl = media.video_url;
 
     let hlsUrl = null;
     const diskManifest = path.join(VIDEOS_DIR, vidId, 'main.m3u8');
     const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
-    if (fs.existsSync(diskManifest) && isMultiRendition) {
+    if (v.storage === 'r2') {
+      // Servido pelo bucket (cdn.*). Durante um reprocessamento a versao
+      // anterior continua no ar ate a nova ser publicada.
+      hlsUrl = v.hls_ready ? media.hls_manifest : null;
+    } else if (fs.existsSync(diskManifest) && isMultiRendition) {
       const manifestUrl = `/videos/${vidId}/main.m3u8`;
       if (!v.hls_ready || v.status === 'optimizing' || v.optimization_progress !== 100) {
         try {
@@ -5192,14 +5647,13 @@ app.get('/api/videos/:id/public', (req, res) => {
       processVideoHLS(vidId, true);
     }
 
-    let smartautoplayUrl = null;
-    if (v.smartautoplay_url) {
-      smartautoplayUrl = `${origin}${v.smartautoplay_url}`;
-    }
+    const smartautoplayUrl = media.smartautoplay_url || null;
 
     let posterUrl = null;
     const posterPath = path.join(VIDEOS_DIR, vidId, 'poster.jpg');
-    if (fs.existsSync(posterPath)) {
+    if (v.storage === 'r2' && (settings.thumbnailUrl || v.thumbnail)) {
+      posterUrl = media.poster_url;
+    } else if (fs.existsSync(posterPath)) {
       posterUrl = `${origin}/videos/${vidId}/poster.jpg`;
     } else if (settings.thumbnailUrl) {
       posterUrl = settings.thumbnailUrl;
@@ -5512,13 +5966,13 @@ app.get('/api/analytics/overview', authMiddleware, (req, res) => {
 
 app.get('/api/analytics/video/:id', authMiddleware, (req, res) => {
   const vidId = req.params.id;
-  const video = db.prepare('SELECT id, title, user_id, plays, duration, settings_json, video_url, file_path, hls_ready, hls_manifest FROM videos WHERE id = ?').get(vidId);
+  const video = db.prepare('SELECT id, title, user_id, plays, duration, settings_json, video_url, file_path, hls_ready, hls_manifest, storage, thumbnail, source_type FROM videos WHERE id = ?').get(vidId);
   if (!video) return res.status(404).json({ error: 'Vídeo não encontrado.' });
   if (req.user.role !== 'owner' && video.user_id !== req.user.id) {
     return res.status(403).json({ error: 'Permissão negada.' });
   }
 
-  if (!video.hls_ready) {
+  if (!video.hls_ready && video.storage !== 'r2') {
     const videoDir = path.join(VIDEOS_DIR, vidId);
     const masterPlaylist = path.join(videoDir, 'main.m3u8');
     if (fs.existsSync(masterPlaylist)) {
@@ -5711,9 +6165,9 @@ app.get('/api/analytics/video/:id', authMiddleware, (req, res) => {
       pitchViews,
       pitchRate: basePlays > 0 ? ((pitchViews / basePlays) * 100).toFixed(1) : '0.0'
     },
-    video_url: video.video_url,
+    video_url: resolveMediaUrl(video, video.video_url, req, 'video'),
     hls_ready: Boolean(video.hls_ready),
-    hls_manifest: video.hls_manifest,
+    hls_manifest: video.hls_ready ? resolveMediaUrl(video, video.hls_manifest, req, 'video') : video.hls_manifest,
     retentionCurve,
     audienceTimeline,
     actionButtons
@@ -6599,17 +7053,43 @@ app.options('/videos/*', (req, res) => {
 
 const posterGenerationInFlight = new Map();
 
+// URLs antigas (/videos/<id>/<arquivo> no dominio do player) de videos que ja
+// foram para o bucket: redireciona para o cdn. Mantem embeds antigos funcionando.
+function redirectToRemoteMedia(req, res, row, storedPath, kind) {
+  if (!row || row.storage !== 'r2' || !storedPath) return false;
+  const target = resolveMediaUrl(row, storedPath, req, kind);
+  if (!target || !/^https?:\/\//i.test(target)) return false;
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.redirect(302, target);
+  return true;
+}
+
 app.get('/videos/:id/:file', asyncRoute(async (req, res) => {
   const vidId = path.basename(req.params.id);
   const fileName = path.basename(req.params.file);
   const filePath = path.join(VIDEOS_DIR, vidId, fileName);
 
+  if (!fs.existsSync(filePath)) {
+    let row = null;
+    try { row = db.prepare('SELECT * FROM videos WHERE id = ?').get(vidId); } catch (e) {}
+    if (row && row.storage === 'r2') {
+      let stored = null;
+      let kind = 'video';
+      if (fileName === 'poster.jpg' || fileName === 'thumbnail.jpg') { stored = row.thumbnail; kind = 'image'; }
+      else if (fileName === 'main.m3u8') stored = row.hls_ready ? row.hls_manifest : null;
+      else if (fileName === 'smartautoplay-0s.mp4') stored = row.smartautoplay_url;
+      else if (row.storage_prefix) stored = `/${row.storage_prefix}/${fileName}`;
+      if (redirectToRemoteMedia(req, res, row, stored, kind)) return;
+    }
+  }
+
   if (fileName === 'main.m3u8') {
     const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
     if (!isMultiRendition && !activeProcessingVids.has(vidId)) {
       let row = null;
-      try { row = db.prepare('SELECT hls_failed FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId); } catch (e) {}
-      if (row && !row.hls_failed) processVideoHLS(vidId, true);
+      try { row = db.prepare('SELECT hls_failed, storage FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId); } catch (e) {}
+      if (row && !row.hls_failed && row.storage !== 'r2') processVideoHLS(vidId, true);
     }
     if (!fs.existsSync(filePath) && !activeProcessingVids.has(vidId)) {
       const videoDir = path.join(VIDEOS_DIR, vidId);
@@ -6733,6 +7213,13 @@ app.get('/videos/:filename', (req, res) => {
 
   if (!fs.existsSync(filePath)) {
     try {
+      const row = db.prepare("SELECT * FROM videos WHERE storage = 'r2' AND source_key LIKE ? LIMIT 1").get(`%/source/${safeFilename}`);
+      if (row && redirectToRemoteMedia(req, res, row, `/${row.source_key}`, 'video')) return;
+    } catch (e) {}
+  }
+
+  if (!fs.existsSync(filePath)) {
+    try {
       const v = db.prepare("SELECT id, file_path FROM videos WHERE video_url LIKE ? OR file_path LIKE ?").get(`%${safeFilename}%`, `%${safeFilename}%`);
       if (v) {
         if (v.file_path && fs.existsSync(v.file_path)) {
@@ -6852,6 +7339,24 @@ try {
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} ativo na porta ${PORT}`);
+  // Novo deploy = novo player.js: limpa as copias antigas do cache da Cloudflare.
+  if (CLOUDFLARE_API_TOKEN) {
+    const scriptHosts = Array.from(new Set([SCRIPTS_DOMAIN, PLAYER_DOMAIN, DASH_DOMAIN, BASE_DOMAIN].filter(Boolean)));
+    const files = [];
+    for (const h of scriptHosts) {
+      for (const p of PLAYER_SCRIPT_PATHS) files.push(`https://${h}${p}`);
+    }
+    purgeCloudflare({ files }).catch(() => {});
+  }
+  const bootStorage = getStorageConfig();
+  if (bootStorage.enabled) {
+    console.log(`[Storage] Bucket ativo: ${bootStorage.bucket} -> ${bootStorage.publicUrl}`);
+    remoteStorage.ensureBucketCors(bootStorage).catch((err) => {
+      console.warn('[Storage] Nao foi possivel configurar o CORS do bucket automaticamente. Configure no painel do R2 (GET/HEAD para qualquer origem):', err.message);
+    });
+  } else if (bootStorage.driver === 's3_r2') {
+    console.warn('[Storage] Bucket selecionado, mas faltam Bucket/Access Key/Secret Key/URL publica: usando o disco local.');
+  }
   setTimeout(() => {
     try { autoCheckPendingHls(); } catch (_) {}
   }, 1000);

@@ -7,14 +7,25 @@
   if (window.__cloudvturb_sdk_loaded) return;
   window.__cloudvturb_sdk_loaded = true;
 
-  if (!document.querySelector('link[href*="vturb"]')) {
-    try {
+  // Dominio do player (iframe). O servidor substitui o marcador abaixo pelo
+  // PLAYER_DOMAIN configurado; sem ele, usa o dominio de onde este script veio.
+  var CONFIGURED_PLAYER_ORIGIN = '__CLOUDVTURB_PLAYER_ORIGIN__';
+  var SCRIPT_ORIGIN = '';
+  try {
+    if (document.currentScript && document.currentScript.src) {
+      SCRIPT_ORIGIN = new URL(document.currentScript.src).origin;
+    }
+  } catch (_) {}
+  var DEFAULT_PLAYER_ORIGIN = (CONFIGURED_PLAYER_ORIGIN.indexOf('__') === 0 ? '' : CONFIGURED_PLAYER_ORIGIN) || SCRIPT_ORIGIN || window.location.origin;
+
+  try {
+    if (!document.querySelector('link[rel="preconnect"][href="' + DEFAULT_PLAYER_ORIGIN + '"]')) {
       var lk = document.createElement('link');
-      lk.rel = 'dns-prefetch';
-      lk.href = 'https://api.vturb.com.br';
+      lk.rel = 'preconnect';
+      lk.href = DEFAULT_PLAYER_ORIGIN;
       document.head.appendChild(lk);
-    } catch (_) {}
-  }
+    }
+  } catch (_) {}
 
   function guardIframeReload(ifr) {
     if (!ifr || ifr.__guarded) return;
@@ -103,7 +114,7 @@
       }
 
       if (placeholder && !existingIfr) {
-        var origin = el.getAttribute('data-host') || window.location.origin;
+        var origin = el.getAttribute('data-host') || DEFAULT_PLAYER_ORIGIN;
         var ifr = document.createElement('iframe');
         ifr.id = 'ifr_' + vidId;
         ifr.className = 'utmify-ignore';

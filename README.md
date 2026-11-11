@@ -125,6 +125,14 @@ npm start
 | `HLS_CONCURRENCY` | Quantos videos o FFmpeg transcodifica ao mesmo tempo (fila) | `1` |
 | `CLOUDFLARE_ZONE_ID` | ID da zona Cloudflare, para limpar o cache ao excluir/bloquear videos | *Opcional* |
 | `CLOUDFLARE_API_TOKEN` | Token da Cloudflare com permissao `Zone > Cache Purge > Purge` | *Opcional* |
+| `CLOUDFLARE_MEDIA_ZONE_ID` | ID da zona do dominio de midia, se for outro dominio | *Vazio (mesma zona)* |
+| `MEDIA_BASE_DOMAIN` | Gera `cdn.`, `scripts.` e `images.` desse dominio | *Vazio (usa o dominio do player)* |
+| `CDN_DOMAIN` / `SCRIPTS_DOMAIN` / `IMAGES_DOMAIN` | Sobrescrevem cada subdominio de midia individualmente | *Vazio* |
+| `STORAGE_DRIVER` | `local` (disco da VPS) ou `r2` (Cloudflare R2 / S3) | `local` |
+| `R2_ACCOUNT_ID` | ID da conta Cloudflare (monta o endpoint do R2) | *Opcional* |
+| `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Bucket e chaves de API do R2/S3 | *Opcional* |
+| `S3_PUBLIC_URL` | URL publica do bucket (ex.: `https://cdn.seudominio.com`) | *Usa `https://CDN_DOMAIN`* |
+| `FFMPEG_PRESET` | Velocidade x qualidade do ffmpeg | `veryfast` |
 
 ---
 
@@ -199,6 +207,54 @@ O **Resend** e utilizado para o envio transacional de e-mails:
      RESEND_FROM_EMAIL=CloudVTurb <nao-responda@meudominio.com>
      ```
 6. Reinicie o servidor. Todos os fluxos de autenticacao e convites passarao a disparar e-mails autenticados com entregabilidade maxima.
+
+## Armazenamento no Cloudflare R2 e Dominios de Midia
+
+Por padrao os videos ficam no disco da VPS. Com o **Cloudflare R2** eles passam a ser entregues direto pela rede da Cloudflare, **sem custo de banda**, sem passar pela VPS e de forma permitida pelos termos da Cloudflare para video.
+
+### Como fica a divisao de dominios
+
+| Subdominio | O que entrega | De onde vem |
+|---|---|---|
+| `seudominio.com`, `dash.`, `player.` | Site, painel e o player (iframe) | VPS |
+| `cdn.<dominio-de-midia>` | HLS (`.m3u8`/`.ts`), mp4 original, smartautoplay | Bucket R2 |
+| `images.<dominio-de-midia>` | Posters / thumbnails | Bucket R2 |
+| `scripts.<dominio-de-midia>` | `player.js` / `sdk.js` (embed) | VPS (com cache da Cloudflare) |
+
+O dominio de midia pode ser **o mesmo** dominio principal (`cdn.seudominio.com`) ou **outro** dominio (ex.: `cdn.seudominio-midia.com`). Quem tem **um dominio so** pode nao configurar nada disso: tudo continua saindo do `player.`.
+
+Nenhum dominio fica gravado no banco: os videos guardam so o caminho, e a URL e montada na hora. Trocar de dominio nao quebra videos antigos, e os embeds antigos (`player.../videos/...`) sao redirecionados automaticamente para o bucket.
+
+### Passo a passo
+
+1. **Crie o bucket**: Cloudflare ➡️ **R2** ➡️ **Create bucket** (ex.: `cloudvturb-videos`).
+2. **Dominio publico**: no bucket ➡️ **Settings** ➡️ **Custom Domains** ➡️ adicione `cdn.<dominio-de-midia>` (e, se quiser, `images.<dominio-de-midia>`). O dominio precisa estar na mesma conta Cloudflare.
+3. **Chaves de API**: R2 ➡️ **Manage R2 API Tokens** ➡️ **Create API Token** com permissao **Admin Read & Write** (permite configurar o CORS automaticamente) restrito ao bucket. Copie o *Access Key ID*, o *Secret Access Key* e o *Account ID*.
+4. **Configure** pelo painel (**Configuracoes ➡️ Provedor de Armazenamento ➡️ Cloudflare R2**) ou pelo `.env`:
+   ```env
+   MEDIA_BASE_DOMAIN=seudominio-midia.com
+   STORAGE_DRIVER=r2
+   R2_ACCOUNT_ID=xxxxxxxxxxxxxxxx
+   S3_BUCKET=cloudvturb-videos
+   S3_ACCESS_KEY=xxxxxxxx
+   S3_SECRET_KEY=xxxxxxxx
+   S3_PUBLIC_URL=https://cdn.seudominio-midia.com
+   ```
+   Ao salvar pelo painel, o sistema **testa as chaves** (grava, le e apaga um arquivo de teste) antes de ativar.
+5. **DNS do `scripts.`**: crie `scripts.<dominio-de-midia>` apontando para o IP da VPS com a **nuvem laranja ativada**.
+6. **Cache Rule** no dominio de midia: **Caching ➡️ Cache Rules** ➡️ `Hostname` `igual a` `cdn.<dominio-de-midia>` (e `images.`) ➡️ **Eligible for cache** ➡️ TTL da borda: **Use cache-control header**. Sem ela a Cloudflare nao guarda `.m3u8`/`.ts` e cada visualizacao vira uma leitura no R2.
+7. Reinicie o servidor. Os videos que ja existem sao **enviados para o bucket automaticamente**, um por vez, sem reconverter. O disco da VPS e liberado assim que cada envio e confirmado.
+
+### Como funciona por dentro
+
+- O upload chega na VPS, o ffmpeg converte (360p / 720p / 1080p) e o resultado e enviado para `videos/<id>/<versao>/` no bucket. O mp4 original fica em `videos/<id>/source/` (usado para reprocessar).
+- Cada conversao usa uma **pasta de versao nova**, entao todos os arquivos podem ter cache `immutable` de 1 ano. Reprocessar publica uma versao nova e apaga a anterior.
+- Excluir um video apaga a pasta no bucket e limpa o cache da Cloudflare (se o token estiver configurado). Videos duplicados compartilham os arquivos, que so sao apagados quando a ultima copia sai.
+- Se o envio ao bucket falhar, o video continua sendo servido pelo disco local e o envio e tentado de novo no proximo boot.
+
+**Custo do R2:** 10 GB gratis, depois cerca de US$ 0,015 por GB/mes. Sem cobranca de saida (banda).
+
+---
 
 ## Otimizacao para Alta Escala e Maxima Performance (Custo R$ 0,00)
 

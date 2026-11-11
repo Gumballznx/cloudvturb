@@ -116,6 +116,9 @@ npm start
 | `GOOGLE_API_KEY` | Chave de API do Google Cloud para o Google Picker | *Opcional (para importacao do Drive)* |
 | `DATA_DIR` | Diretorio do banco de dados SQLite e avatares | `/app/data` ou `./server/data` |
 | `VIDEOS_DIR` | Diretorio de armazenamento de videos | `/app/videos` ou `./server/videos` |
+| `HLS_CONCURRENCY` | Quantos videos o FFmpeg transcodifica ao mesmo tempo (fila) | `1` |
+| `CLOUDFLARE_ZONE_ID` | ID da zona Cloudflare, para limpar o cache ao excluir/bloquear videos | *Opcional* |
+| `CLOUDFLARE_API_TOKEN` | Token da Cloudflare com permissao `Zone > Cache Purge > Purge` | *Opcional* |
 
 ---
 
@@ -224,6 +227,12 @@ Por padrao, o plano gratuito da Cloudflare nao armazena em cache arquivos de vid
 5. Clique em **Implantar** (Deploy).
 
 **Resultado**: O primeiro visitante que solicita um trecho de video faz o download da sua VPS uma unica vez. Todos os proximos milhares de visitantes baixam os pedacos diretamente do cache da Cloudflare em milissegundos, com consumo zero de banda do seu servidor.
+
+**Como o cache se mantem correto:**
+- Playlists (`.m3u8`) sao enviadas com `no-store` e nunca ficam em cache.
+- Segmentos (`.ts`), posters e MP4 usam `immutable` (1 ano). Cada transcodificacao gera segmentos com um **nome novo** (`s<versao>_<qualidade>_<n>.ts`), entao reprocessar um video nunca entrega pedacos antigos do cache.
+- Ao **excluir ou bloquear** um video, o servidor limpa o cache da Cloudflare automaticamente se `CLOUDFLARE_ZONE_ID` e `CLOUDFLARE_API_TOKEN` estiverem configurados. Sem eles, o video apagado pode continuar sendo servido pelo cache.
+- Para conferir se esta funcionando, abra a URL de um `.ts` e veja o cabecalho `cf-cache-status` (`HIT` = servido pela Cloudflare).
 
 ---
 

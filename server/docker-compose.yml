@@ -17,6 +17,9 @@ services:
       - DATA_DIR=/app/data
       - VIDEOS_DIR=/app/videos
       - PUBLIC_DIR=/app/public
+      - HLS_CONCURRENCY=${HLS_CONCURRENCY:-1}
+      - CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
     volumes:
       - /opt/apps/cloudvturb/data:/app/data
       - /opt/apps/cloudvturb/videos:/app/videos

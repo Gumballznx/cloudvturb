@@ -17,7 +17,7 @@ const multer = require('multer');
 const QRCode = require('qrcode');
 const Database = require('better-sqlite3');
 const { Readable } = require('stream');
-const { finished } = require('stream/promises');
+const { finished, pipeline } = require('stream/promises');
 const geoip = require('geoip-lite');
 
 [path.join(__dirname, '.env'), path.join(__dirname, '..', '.env')].forEach(envPath => {
@@ -49,7 +49,8 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const isInsecureSecret = !process.env.JWT_SECRET ||
   process.env.JWT_SECRET.trim() === '' ||
   process.env.JWT_SECRET === 'cloudvturb_ultra_secret_key_2026_jwt_token_99' ||
-  process.env.JWT_SECRET === 'cloudvturb_dev_secret_key_2026';
+  process.env.JWT_SECRET === 'cloudvturb_dev_secret_key_2026' ||
+  process.env.JWT_SECRET === 'cloudvturb_altere_esta_chave_jwt_secreta_2026';
 
 if (NODE_ENV === 'production' && isInsecureSecret) {
   console.error('ERRO FATAL: JWT_SECRET seguro deve ser configurado via variável de ambiente em produção.');
@@ -392,6 +393,7 @@ try { db.exec("ALTER TABLE videos ADD COLUMN deleted_at DATETIME DEFAULT NULL");
 try { db.exec("ALTER TABLE videos ADD COLUMN hls_ready INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN hls_manifest TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN smartautoplay_url TEXT DEFAULT NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE videos ADD COLUMN hls_failed INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_at DATETIME DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN blocked_reason TEXT DEFAULT NULL"); } catch (e) {}
 try { db.exec("ALTER TABLE videos ADD COLUMN status TEXT DEFAULT 'ready'"); } catch (e) {}
@@ -859,347 +861,561 @@ function detectVideoAspectRatio(filePath) {
     const json = JSON.parse(probe.toString());
     const vStream = (json.streams && json.streams[0]) || null;
     if (!vStream || !vStream.width || !vStream.height) return null;
-    const w = parseInt(vStream.width, 10);
-    const h = parseInt(vStream.height, 10);
-    if (!w || !h) return null;
-    const ratio = w / h;
-    const targets = [
-      { id: '9:16', val: 9 / 16 },
-      { id: '3:4',  val: 3 / 4 },
-      { id: '4:5',  val: 4 / 5 },
-      { id: '1:1',  val: 1 },
-      { id: '4:3',  val: 4 / 3 },
-      { id: '16:9', val: 16 / 9 }
-    ];
-    let closest = targets[0];
-    let minDiff = Math.abs(ratio - targets[0].val);
-    for (let i = 1; i < targets.length; i++) {
-      const diff = Math.abs(ratio - targets[i].val);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = targets[i];
-      }
-    }
-    return closest.id;
+    return aspectFromDims(parseInt(vStream.width, 10), parseInt(vStream.height, 10));
   } catch (e) {
     return null;
   }
 }
 
-const activeProcessingVids = new Set();
+function aspectFromDims(w, h) {
+  if (!w || !h) return null;
+  const ratio = w / h;
+  const targets = [
+    { id: '9:16', val: 9 / 16 },
+    { id: '3:4',  val: 3 / 4 },
+    { id: '4:5',  val: 4 / 5 },
+    { id: '1:1',  val: 1 },
+    { id: '4:3',  val: 4 / 3 },
+    { id: '16:9', val: 16 / 9 }
+  ];
+  let closest = targets[0];
+  let minDiff = Math.abs(ratio - targets[0].val);
+  for (let i = 1; i < targets.length; i++) {
+    const diff = Math.abs(ratio - targets[i].val);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = targets[i];
+    }
+  }
+  return closest.id;
+}
 
+// Videos em fila ou em processamento (evita processar o mesmo video duas vezes).
+const activeProcessingVids = new Set();
+const hlsQueue = [];
+let hlsRunning = 0;
+const HLS_CONCURRENCY = Math.max(1, parseInt(process.env.HLS_CONCURRENCY || '1', 10) || 1);
+
+// Executa um binario (ffmpeg/ffprobe) de forma assincrona, sem bloquear o event loop.
+function runCmd(bin, args, timeoutMs = 60000, captureStdout = false) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let done = false;
+    let proc;
+    try {
+      proc = spawn(bin, args, { stdio: ['ignore', captureStdout ? 'pipe' : 'ignore', 'ignore'] });
+    } catch (e) {
+      return resolve({ code: -1, stdout: '' });
+    }
+    const timer = setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch (_) {}
+    }, timeoutMs);
+    if (captureStdout && proc.stdout) {
+      proc.stdout.on('data', (d) => {
+        if (stdout.length < 1024 * 1024) stdout += d.toString();
+      });
+    }
+    const finish = (code) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve({ code, stdout });
+    };
+    proc.on('error', () => finish(-1));
+    proc.on('close', (code) => finish(code === null ? -1 : code));
+  });
+}
+
+function formatDurationSeconds(sec) {
+  if (isNaN(sec) || sec <= 0) return null;
+  const totalSec = Math.round(sec);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+async function probeVideoAsync(filePath) {
+  const info = { duration: 0, width: 0, height: 0, hasAudio: false, codec: '' };
+  if (!filePath || !fs.existsSync(filePath)) return info;
+  const r = await runCmd('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height',
+    '-of', 'json',
+    filePath
+  ], 30000, true);
+  if (r.code !== 0) return info;
+  try {
+    const json = JSON.parse(r.stdout);
+    const streams = json.streams || [];
+    info.duration = parseFloat((json.format && json.format.duration) || '0') || 0;
+    info.hasAudio = streams.some(s => s.codec_type === 'audio');
+    const vStream = streams.find(s => s.codec_type === 'video');
+    if (vStream) {
+      info.codec = vStream.codec_name || '';
+      info.width = parseInt(vStream.width, 10) || 0;
+      info.height = parseInt(vStream.height, 10) || 0;
+    }
+  } catch (e) {}
+  return info;
+}
+
+async function getVideoDurationFormattedAsync(filePath) {
+  const info = await probeVideoAsync(filePath);
+  return formatDurationSeconds(info.duration);
+}
+
+// Verifica se o atomo "moov" de um MP4/MOV ja esta antes do "mdat" (faststart).
+function mp4NeedsFaststart(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const size = fs.fstatSync(fd).size;
+    let offset = 0;
+    const header = Buffer.alloc(16);
+    for (let i = 0; i < 50 && offset + 8 <= size; i++) {
+      fs.readSync(fd, header, 0, 16, offset);
+      let boxSize = header.readUInt32BE(0);
+      const type = header.toString('latin1', 4, 8);
+      if (type === 'moov') return false;
+      if (type === 'mdat') return true;
+      if (boxSize === 1) {
+        boxSize = Number(header.readBigUInt64BE(8));
+      } else if (boxSize === 0) {
+        return false;
+      }
+      if (boxSize < 8) return false;
+      offset += boxSize;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+  }
+}
+
+async function generatePosterAsync(inputPath, posterPath) {
+  let r = await runCmd('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath], 60000);
+  if ((r.code !== 0 || !fs.existsSync(posterPath))) {
+    r = await runCmd('ffmpeg', ['-y', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath], 60000);
+  }
+  return r.code === 0 && fs.existsSync(posterPath);
+}
+
+function evenNum(n) {
+  return Math.max(2, Math.round(n / 2) * 2);
+}
+
+// Calcula a resolucao de uma rendicao limitando o lado menor a "shortSide".
+function renditionSize(origW, origH, shortSide) {
+  const isVertical = origH > origW;
+  const origShort = isVertical ? origW : origH;
+  const target = Math.min(origShort, shortSide);
+  const scale = target / origShort;
+  return { w: evenNum(origW * scale), h: evenNum(origH * scale) };
+}
+
+function findVideoInputPath(v, vidId) {
+  let inputPath = v.file_path;
+  const baseName = v.video_url ? path.basename(v.video_url) : '';
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    if (baseName) {
+      const c1 = path.join(VIDEOS_DIR, baseName);
+      const c2 = path.join(VIDEOS_DIR, vidId, baseName);
+      if (fs.existsSync(c1)) inputPath = c1;
+      else if (fs.existsSync(c2)) inputPath = c2;
+    }
+  }
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    const vidFolder = path.join(VIDEOS_DIR, vidId);
+    if (fs.existsSync(vidFolder)) {
+      const files = fs.readdirSync(vidFolder);
+      const mp4 = files.find(f => f.endsWith('.mp4') && !f.includes('smartautoplay'));
+      if (mp4) inputPath = path.join(vidFolder, mp4);
+    }
+  }
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    if (fs.existsSync(VIDEOS_DIR)) {
+      const rootFiles = fs.readdirSync(VIDEOS_DIR);
+      const rootMp4 = rootFiles.find(f => f.includes(vidId) && f.endsWith('.mp4'));
+      if (rootMp4) inputPath = path.join(VIDEOS_DIR, rootMp4);
+    }
+  }
+  return inputPath && fs.existsSync(inputPath) ? inputPath : null;
+}
+
+function markHlsFailed(vidId) {
+  try {
+    db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_failed = 1 WHERE id = ?").run(vidId);
+  } catch (e) {}
+}
+
+// Coloca o video na fila de transcodificacao (1 por vez por padrao, HLS_CONCURRENCY).
 function processVideoHLS(vidId, force = false) {
-  if (activeProcessingVids.has(vidId)) return;
+  if (!vidId || activeProcessingVids.has(vidId)) return;
   activeProcessingVids.add(vidId);
+  hlsQueue.push({ vidId, force });
+  pumpHlsQueue();
+}
+
+function pumpHlsQueue() {
+  while (hlsRunning < HLS_CONCURRENCY && hlsQueue.length > 0) {
+    const job = hlsQueue.shift();
+    hlsRunning++;
+    runHlsJob(job.vidId, job.force)
+      .catch((err) => {
+        console.error(`[HLS] Falha ao processar ${job.vidId}:`, err && err.message ? err.message : err);
+        markHlsFailed(job.vidId);
+      })
+      .finally(() => {
+        hlsRunning--;
+        activeProcessingVids.delete(job.vidId);
+        pumpHlsQueue();
+      });
+  }
+}
+
+async function runHlsJob(vidId, force) {
+  const v = db.prepare('SELECT * FROM videos WHERE id = ?').get(vidId);
+  if (!v) return;
+
+  let inputPath = findVideoInputPath(v, vidId);
+  if (!inputPath) {
+    markHlsFailed(vidId);
+    return;
+  }
+  try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(inputPath, vidId); } catch (e) {}
+
+  const videoDir = path.join(VIDEOS_DIR, vidId);
+  if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+
+  const masterPlaylistPath = path.join(videoDir, 'main.m3u8');
+  const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
+  if (!force && fs.existsSync(masterPlaylistPath) && isMultiRendition) {
+    const manifestUrl = `/videos/${vidId}/main.m3u8`;
+    try {
+      db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_failed = 0, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
+    } catch (e) {}
+    return;
+  }
 
   try {
-    const v = db.prepare('SELECT * FROM videos WHERE id = ?').get(vidId);
-    if (!v) {
-      activeProcessingVids.delete(vidId);
-      return;
-    }
+    db.prepare("UPDATE videos SET status = 'optimizing', optimization_progress = 25 WHERE id = ?").run(vidId);
+  } catch (e) {}
 
-    let inputPath = v.file_path;
-    const baseName = v.video_url ? path.basename(v.video_url) : '';
-    if (!inputPath || !fs.existsSync(inputPath)) {
-      if (baseName) {
-        const c1 = path.join(VIDEOS_DIR, baseName);
-        const c2 = path.join(VIDEOS_DIR, vidId, baseName);
-        if (fs.existsSync(c1)) inputPath = c1;
-        else if (fs.existsSync(c2)) inputPath = c2;
-      }
-    }
-    if (!inputPath || !fs.existsSync(inputPath)) {
-      const vidFolder = path.join(VIDEOS_DIR, vidId);
-      if (fs.existsSync(vidFolder)) {
-        const files = fs.readdirSync(vidFolder);
-        const mp4 = files.find(f => f.endsWith('.mp4') && !f.includes('smartautoplay'));
-        if (mp4) inputPath = path.join(vidFolder, mp4);
-      }
-    }
-    if (!inputPath || !fs.existsSync(inputPath)) {
-      if (fs.existsSync(VIDEOS_DIR)) {
-        const rootFiles = fs.readdirSync(VIDEOS_DIR);
-        const rootMp4 = rootFiles.find(f => f.includes(vidId) && f.endsWith('.mp4'));
-        if (rootMp4) inputPath = path.join(VIDEOS_DIR, rootMp4);
-      }
-    }
-    if (inputPath && fs.existsSync(inputPath)) {
-      try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(inputPath, vidId); } catch (e) {}
-    } else {
-      try { db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId); } catch (e) {}
-      activeProcessingVids.delete(vidId);
-      return;
-    }
-    const detectedAspect = detectVideoAspectRatio(inputPath);
-    if (detectedAspect) {
-      try {
-        let s = JSON.parse(v.settings_json || '{}');
-        if (!s.aspectRatio || s.aspectRatio === '16:9') {
-          s.aspectRatio = detectedAspect;
-          db.prepare('UPDATE videos SET settings_json = ? WHERE id = ?').run(JSON.stringify(s), vidId);
-        }
-      } catch (e) {}
-    }
+  let probe = await probeVideoAsync(inputPath);
 
-    const videoDir = path.join(VIDEOS_DIR, vidId);
-    if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
-
-    const masterPlaylistPath = path.join(videoDir, 'main.m3u8');
-    const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
-    if (!force && fs.existsSync(masterPlaylistPath) && isMultiRendition) {
-      const manifestUrl = `/videos/${vidId}/main.m3u8`;
-      try {
-        db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
-      } catch (e) {}
-      activeProcessingVids.delete(vidId);
-      return;
-    }
-
+  const detectedAspect = probe.width && probe.height ? aspectFromDims(probe.width, probe.height) : null;
+  if (detectedAspect) {
     try {
-      db.prepare("UPDATE videos SET status = 'optimizing', optimization_progress = 25 WHERE id = ?").run(vidId);
-    } catch (e) {}
-
-    const realDuration = getVideoDurationFormatted(inputPath);
-    if (realDuration && (v.duration === '10:00' || v.duration === '05:00' || !v.duration)) {
-      try { db.prepare('UPDATE videos SET duration = ? WHERE id = ?').run(realDuration, vidId); } catch (e) {}
-    }
-
-    dispatchWebhookEvent(v.user_id, 'video.processing', {
-      video_id: vidId,
-      name: v.title || '',
-      progress: 25
-    });
-
-    const posterPath = path.join(videoDir, 'poster.jpg');
-    if (!fs.existsSync(posterPath)) {
-      try {
-        execFileSync('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath], { timeout: 15000 });
-        if (fs.existsSync(posterPath)) {
-          const posterUrl = `/videos/${vidId}/poster.jpg`;
-          try {
-            db.prepare("UPDATE videos SET thumbnail = ?, optimization_progress = 40 WHERE id = ?").run(posterUrl, vidId);
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }
-
-    const faststartPath = path.join(videoDir, 'faststart.mp4');
-    if (!fs.existsSync(faststartPath)) {
-      try {
-        execFileSync('ffmpeg', ['-y', '-i', inputPath, '-c', 'copy', '-movflags', '+faststart', faststartPath], { timeout: 30000 });
-        if (fs.existsSync(faststartPath)) {
-          try {
-            fs.renameSync(faststartPath, inputPath);
-          } catch (renErr) {
-            try { db.prepare("UPDATE videos SET file_path = ? WHERE id = ?").run(faststartPath, vidId); } catch (e) {}
-            inputPath = faststartPath;
-          }
-        }
-      } catch (fsErr) {}
-    }
-
-    const smartautoplayPath = path.join(videoDir, 'smartautoplay-0s.mp4');
-    if (!fs.existsSync(smartautoplayPath)) {
-      try {
-        execFileSync('ffmpeg', [
-          '-y', '-ss', '0', '-i', inputPath, '-t', '10', '-an',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-          '-movflags', '+faststart', smartautoplayPath
-        ], { timeout: 25000 });
-        if (fs.existsSync(smartautoplayPath)) {
-          const smartUrl = `/videos/${vidId}/smartautoplay-0s.mp4`;
-          try {
-            db.prepare("UPDATE videos SET smartautoplay_url = ?, optimization_progress = 60 WHERE id = ?").run(smartUrl, vidId);
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }
-
-    let hasAudio = false;
-    let videoCodec = '';
-    let origWidth = 0;
-    let origHeight = 0;
-    try {
-      const probeStreams = execFileSync('ffprobe', [
-        '-v', 'error',
-        '-show_entries', 'stream=codec_type,codec_name,width,height',
-        '-of', 'json',
-        inputPath
-      ], { timeout: 10000 });
-      const probeJson = JSON.parse(probeStreams.toString());
-      const streams = probeJson.streams || [];
-      hasAudio = streams.some(s => s.codec_type === 'audio');
-      const vStream = streams.find(s => s.codec_type === 'video');
-      if (vStream) {
-        videoCodec = vStream.codec_name;
-        origWidth = parseInt(vStream.width, 10) || 0;
-        origHeight = parseInt(vStream.height, 10) || 0;
+      const s = JSON.parse(v.settings_json || '{}');
+      if (!s.aspectRatio || s.aspectRatio === '16:9') {
+        s.aspectRatio = detectedAspect;
+        db.prepare('UPDATE videos SET settings_json = ? WHERE id = ?').run(JSON.stringify(s), vidId);
       }
-    } catch (e) {}
-
-    if (origWidth <= 0 || origHeight <= 0) {
-      origWidth = 1280;
-      origHeight = 720;
-    }
-
-    const isVertical = origHeight > origWidth;
-    let w0, h0, w1, h1, w2, h2;
-
-    if (isVertical) {
-      w0 = 360;
-      h0 = Math.max(2, Math.round((origHeight * (360 / origWidth)) / 2) * 2);
-      w1 = Math.min(origWidth, 720);
-      h1 = Math.max(2, Math.round((origHeight * (w1 / origWidth)) / 2) * 2);
-      w2 = origWidth % 2 === 0 ? origWidth : origWidth - 1;
-      h2 = origHeight % 2 === 0 ? origHeight : origHeight - 1;
-    } else {
-      h0 = 360;
-      w0 = Math.max(2, Math.round((origWidth * (360 / origHeight)) / 2) * 2);
-      h1 = Math.min(origHeight, 720);
-      w1 = Math.max(2, Math.round((origWidth * (h1 / origHeight)) / 2) * 2);
-      w2 = origWidth % 2 === 0 ? origWidth : origWidth - 1;
-      h2 = origHeight % 2 === 0 ? origHeight : origHeight - 1;
-    }
-
-    w0 = Math.min(w0, w2);
-    h0 = Math.min(h0, h2);
-    w1 = Math.min(w1, w2);
-    h1 = Math.min(h1, h2);
-
-    const hlsArgs = [
-      '-y',
-      '-i', inputPath,
-      '-filter_complex', `[0:v]split=3[v0][v1][v2];[v0]scale=${w0}:${h0}[v0out];[v1]scale=${w1}:${h1}[v1out];[v2]scale=${w2}:${h2}[v2out]`,
-      '-map', '[v0out]',
-      '-c:v:0', 'libx264',
-      '-preset', 'ultrafast',
-      '-b:v:0', '800k',
-      '-maxrate:v:0', '856k',
-      '-bufsize:v:0', '1200k',
-      '-map', '[v1out]',
-      '-c:v:1', 'libx264',
-      '-preset', 'ultrafast',
-      '-b:v:1', '1800k',
-      '-maxrate:v:1', '1926k',
-      '-bufsize:v:1', '2700k',
-      '-map', '[v2out]',
-      '-c:v:2', 'libx264',
-      '-preset', 'ultrafast',
-      '-b:v:2', '3200k',
-      '-maxrate:v:2', '3424k',
-      '-bufsize:v:2', '4800k'
-    ];
-
-    if (hasAudio) {
-      hlsArgs.push(
-        '-map', '0:a?', '-c:a:0', 'aac', '-b:a:0', '96k',
-        '-map', '0:a?', '-c:a:1', 'aac', '-b:a:1', '128k',
-        '-map', '0:a?', '-c:a:2', 'aac', '-b:a:2', '128k',
-        '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2'
-      );
-    } else {
-      hlsArgs.push(
-        '-an',
-        '-var_stream_map', 'v:0 v:1 v:2'
-      );
-    }
-
-    hlsArgs.push(
-      '-f', 'hls',
-      '-hls_time', '4',
-      '-hls_playlist_type', 'vod',
-      '-hls_flags', 'independent_segments',
-      '-master_pl_name', 'main.m3u8',
-      '-hls_segment_filename', path.join(videoDir, 'segment_%v_%03d.ts'),
-      path.join(videoDir, 'video_%v.m3u8')
-    );
-
-    const hlsProc = spawn('ffmpeg', hlsArgs, { stdio: 'ignore' });
-    hlsProc.on('error', () => {
-      activeProcessingVids.delete(vidId);
-      try {
-        db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId);
-      } catch (e) {}
-    });
-
-    hlsProc.on('close', (code) => {
-      activeProcessingVids.delete(vidId);
-      const manifestExists = fs.existsSync(masterPlaylistPath) || fs.existsSync(path.join(videoDir, 'video_0.m3u8')) || fs.existsSync(path.join(videoDir, 'video.m3u8'));
-      if (code === 0 && manifestExists) {
-        const manifestFile = fs.existsSync(masterPlaylistPath) ? 'main.m3u8' : (fs.existsSync(path.join(videoDir, 'video_0.m3u8')) ? 'video_0.m3u8' : 'video.m3u8');
-        const manifestUrl = `/videos/${vidId}/${manifestFile}`;
-        try {
-          db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
-        } catch (e) {}
-        dispatchWebhookEvent(v.user_id, 'video.ready', {
-          video_id: vidId,
-          name: v.title || '',
-          hls_manifest: manifestUrl
-        });
-      } else {
-        try {
-          db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId);
-        } catch (e) {}
-      }
-    });
-  } catch (err) {
-    activeProcessingVids.delete(vidId);
-    try {
-      db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100 WHERE id = ?").run(vidId);
     } catch (e) {}
   }
+
+  const realDuration = formatDurationSeconds(probe.duration);
+  if (realDuration && (v.duration === '10:00' || v.duration === '05:00' || !v.duration)) {
+    try { db.prepare('UPDATE videos SET duration = ? WHERE id = ?').run(realDuration, vidId); } catch (e) {}
+  }
+
+  dispatchWebhookEvent(v.user_id, 'video.processing', {
+    video_id: vidId,
+    name: v.title || '',
+    progress: 25
+  });
+
+  const posterPath = path.join(videoDir, 'poster.jpg');
+  if (!fs.existsSync(posterPath)) {
+    if (await generatePosterAsync(inputPath, posterPath)) {
+      try {
+        db.prepare('UPDATE videos SET thumbnail = ?, optimization_progress = 40 WHERE id = ?').run(`/videos/${vidId}/poster.jpg`, vidId);
+      } catch (e) {}
+    }
+  }
+
+  // Faststart apenas quando o "moov" esta no fim do arquivo. Assim o mp4 nao e
+  // regravado a cada reprocessamento (o que deixaria caches com bytes diferentes).
+  const ext = path.extname(inputPath).toLowerCase();
+  if (['.mp4', '.m4v', '.mov'].includes(ext) && mp4NeedsFaststart(inputPath)) {
+    const faststartPath = path.join(videoDir, 'faststart' + ext);
+    const r = await runCmd('ffmpeg', ['-y', '-i', inputPath, '-map', '0', '-c', 'copy', '-movflags', '+faststart', faststartPath], 10 * 60 * 1000);
+    if (r.code === 0 && fs.existsSync(faststartPath)) {
+      try {
+        fs.renameSync(faststartPath, inputPath);
+      } catch (renErr) {
+        try { db.prepare('UPDATE videos SET file_path = ? WHERE id = ?').run(faststartPath, vidId); } catch (e) {}
+        inputPath = faststartPath;
+      }
+    } else {
+      try { fs.unlinkSync(faststartPath); } catch (e) {}
+    }
+  }
+
+  const smartautoplayPath = path.join(videoDir, 'smartautoplay-0s.mp4');
+  if (!fs.existsSync(smartautoplayPath)) {
+    const r = await runCmd('ffmpeg', [
+      '-y', '-ss', '0', '-i', inputPath, '-t', '10', '-an',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart', smartautoplayPath
+    ], 2 * 60 * 1000);
+    if (r.code === 0 && fs.existsSync(smartautoplayPath)) {
+      try {
+        db.prepare('UPDATE videos SET smartautoplay_url = ?, optimization_progress = 60 WHERE id = ?').run(`/videos/${vidId}/smartautoplay-0s.mp4`, vidId);
+      } catch (e) {}
+    }
+  }
+
+  if (!probe.width || !probe.height) {
+    probe = await probeVideoAsync(inputPath);
+  }
+  const origWidth = probe.width > 0 ? probe.width : 1280;
+  const origHeight = probe.height > 0 ? probe.height : 720;
+
+  // 360p / 720p / ate 1080p (a rendicao alta nunca passa de 1080p).
+  const r0 = renditionSize(origWidth, origHeight, 360);
+  const r1 = renditionSize(origWidth, origHeight, 720);
+  const r2 = renditionSize(origWidth, origHeight, 1080);
+
+  // Cada transcodificacao gera segmentos com nome novo ("s<versao>_..."): como os
+  // segmentos usam Cache-Control immutable (Cloudflare/navegador guardam por 1 ano),
+  // reaproveitar o mesmo nome serviria pedacos antigos depois de reprocessar.
+  const version = Date.now().toString(36);
+  const buildDir = path.join(videoDir, `.build_${version}`);
+  fs.mkdirSync(buildDir, { recursive: true });
+
+  const hlsArgs = [
+    '-y',
+    '-i', inputPath,
+    '-filter_complex', `[0:v]split=3[v0][v1][v2];[v0]scale=${r0.w}:${r0.h}[v0out];[v1]scale=${r1.w}:${r1.h}[v1out];[v2]scale=${r2.w}:${r2.h}[v2out]`,
+    '-map', '[v0out]',
+    '-c:v:0', 'libx264',
+    '-b:v:0', '800k',
+    '-maxrate:v:0', '856k',
+    '-bufsize:v:0', '1200k',
+    '-map', '[v1out]',
+    '-c:v:1', 'libx264',
+    '-b:v:1', '1800k',
+    '-maxrate:v:1', '1926k',
+    '-bufsize:v:1', '2700k',
+    '-map', '[v2out]',
+    '-c:v:2', 'libx264',
+    '-b:v:2', '3200k',
+    '-maxrate:v:2', '3424k',
+    '-bufsize:v:2', '4800k',
+    '-preset', 'ultrafast',
+    '-pix_fmt', 'yuv420p',
+    // Keyframe a cada 4s em todas as rendicoes: segmentos de tamanho fixo e
+    // alinhados, permitindo ao hls.js trocar de qualidade sem engasgar.
+    '-force_key_frames', 'expr:gte(t,n_forced*4)',
+    '-sc_threshold', '0'
+  ];
+
+  if (probe.hasAudio) {
+    hlsArgs.push(
+      '-map', '0:a:0', '-c:a:0', 'aac', '-b:a:0', '96k',
+      '-map', '0:a:0', '-c:a:1', 'aac', '-b:a:1', '128k',
+      '-map', '0:a:0', '-c:a:2', 'aac', '-b:a:2', '128k',
+      '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2'
+    );
+  } else {
+    hlsArgs.push(
+      '-an',
+      '-var_stream_map', 'v:0 v:1 v:2'
+    );
+  }
+
+  hlsArgs.push(
+    '-f', 'hls',
+    '-hls_time', '4',
+    '-hls_playlist_type', 'vod',
+    '-hls_flags', 'independent_segments',
+    '-master_pl_name', 'main.m3u8',
+    '-hls_segment_filename', path.join(buildDir, `s${version}_%v_%03d.ts`),
+    path.join(buildDir, 'video_%v.m3u8')
+  );
+
+  const hlsTimeout = Math.max(30 * 60 * 1000, Math.round((probe.duration || 0) * 8 * 1000));
+  const result = await runCmd('ffmpeg', hlsArgs, hlsTimeout);
+
+  const builtMaster = path.join(buildDir, 'main.m3u8');
+  const builtV0 = path.join(buildDir, 'video_0.m3u8');
+  if (result.code !== 0 || !fs.existsSync(builtMaster) || !fs.existsSync(builtV0)) {
+    try { fs.rmSync(buildDir, { recursive: true, force: true }); } catch (e) {}
+    markHlsFailed(vidId);
+    return;
+  }
+
+  // Publica a nova versao: segmentos primeiro, playlists por ultimo (rename atomico).
+  const builtFiles = fs.readdirSync(buildDir);
+  for (const f of builtFiles.filter(f => f.endsWith('.ts'))) {
+    fs.renameSync(path.join(buildDir, f), path.join(videoDir, f));
+  }
+  for (const f of builtFiles.filter(f => f.endsWith('.m3u8') && f !== 'main.m3u8')) {
+    fs.renameSync(path.join(buildDir, f), path.join(videoDir, f));
+  }
+  fs.renameSync(builtMaster, masterPlaylistPath);
+  try { fs.rmSync(buildDir, { recursive: true, force: true }); } catch (e) {}
+
+  // Remove segmentos de versoes anteriores e playlist legada.
+  try {
+    for (const f of fs.readdirSync(videoDir)) {
+      const isOldSegment = f.endsWith('.ts') && !f.startsWith(`s${version}_`);
+      if (isOldSegment || f === 'video.m3u8') {
+        try { fs.unlinkSync(path.join(videoDir, f)); } catch (e) {}
+      }
+    }
+  } catch (e) {}
+
+  const manifestUrl = `/videos/${vidId}/main.m3u8`;
+  try {
+    db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_failed = 0, hls_manifest = ? WHERE id = ?").run(manifestUrl, vidId);
+  } catch (e) {}
+  dispatchWebhookEvent(v.user_id, 'video.ready', {
+    video_id: vidId,
+    name: v.title || '',
+    hls_manifest: manifestUrl
+  });
 }
 
 function autoCheckPendingHls() {
   try {
-    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest, status FROM videos WHERE deleted_at IS NULL").all();
+    const allVids = db.prepare("SELECT id, file_path, video_url, hls_ready, hls_manifest, hls_failed, status, optimization_progress FROM videos WHERE deleted_at IS NULL").all();
+    const posterJobs = [];
     for (const v of allVids) {
       const videoDir = path.join(VIDEOS_DIR, v.id);
       const masterPlaylist = path.join(videoDir, 'main.m3u8');
       const isMultiRendition = fs.existsSync(path.join(videoDir, 'video_0.m3u8'));
+
+      // Restos de transcodificacoes interrompidas (ex.: container reiniciado).
+      try {
+        if (fs.existsSync(videoDir)) {
+          for (const f of fs.readdirSync(videoDir)) {
+            if (f.startsWith('.build_')) {
+              try { fs.rmSync(path.join(videoDir, f), { recursive: true, force: true }); } catch (e) {}
+            }
+          }
+        }
+      } catch (e) {}
+
       if (fs.existsSync(masterPlaylist) && isMultiRendition) {
         if (!v.hls_ready || v.status === 'optimizing' || v.optimization_progress !== 100) {
           const manifestUrl = `/videos/${v.id}/main.m3u8`;
           db.prepare("UPDATE videos SET status = 'ready', optimization_progress = 100, hls_ready = 1, hls_manifest = ? WHERE id = ?").run(manifestUrl, v.id);
         }
-      } else if (v.status === 'optimizing' || !isMultiRendition) {
-        processVideoHLS(v.id, !isMultiRendition);
+        continue;
       }
 
+      // Video que ja falhou nao entra em loop infinito; use "reprocessar" manualmente.
+      if (v.hls_failed && v.status !== 'optimizing') continue;
+
+      // O job HLS tambem gera o poster, entao nao e preciso um ffmpeg extra.
+      processVideoHLS(v.id, !isMultiRendition);
+    }
+
+    for (const v of allVids) {
+      if (activeProcessingVids.has(v.id)) continue;
+      const videoDir = path.join(VIDEOS_DIR, v.id);
       const posterPath = path.join(videoDir, 'poster.jpg');
-      if (!fs.existsSync(posterPath)) {
-        let inputPath = v.file_path;
-        if (!inputPath || !fs.existsSync(inputPath)) {
-          if (v.video_url && v.video_url.startsWith('/videos/')) {
-            const candidate = path.join(VIDEOS_DIR, path.basename(v.video_url));
-            if (fs.existsSync(candidate)) inputPath = candidate;
+      if (fs.existsSync(posterPath)) continue;
+      const inputPath = findVideoInputPath(v, v.id);
+      if (inputPath) posterJobs.push({ id: v.id, inputPath, videoDir, posterPath });
+    }
+
+    // Posters gerados um de cada vez, para nao abrir dezenas de ffmpeg no boot.
+    (async () => {
+      for (const job of posterJobs) {
+        try {
+          if (!fs.existsSync(job.videoDir)) fs.mkdirSync(job.videoDir, { recursive: true });
+          if (await generatePosterAsync(job.inputPath, job.posterPath)) {
+            db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(`/videos/${job.id}/poster.jpg`, job.id);
           }
-          if (!inputPath || !fs.existsSync(inputPath)) {
-            try {
-              if (fs.existsSync(videoDir)) {
-                const files = fs.readdirSync(videoDir);
-                const mp4 = files.find(f => f.endsWith('.mp4'));
-                if (mp4) inputPath = path.join(videoDir, mp4);
-              }
-            } catch (e) {}
-          }
-        }
-        if (inputPath && fs.existsSync(inputPath)) {
-          try {
-            const pProc2 = spawn('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', posterPath]);
-            pProc2.on('error', () => {});
-            pProc2.on('close', (c) => {
-              if (c === 0 && fs.existsSync(posterPath)) {
-                try { db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(`/videos/${v.id}/poster.jpg`, v.id); } catch (e) {}
-              }
-            });
-          } catch (e) {}
-        }
+        } catch (e) {}
+      }
+    })();
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// Purge do cache da Cloudflare (opcional). Configure CLOUDFLARE_ZONE_ID e
+// CLOUDFLARE_API_TOKEN (permissao "Zone > Cache Purge > Purge").
+// ---------------------------------------------------------------------------
+const CLOUDFLARE_ZONE_ID = (process.env.CLOUDFLARE_ZONE_ID || '').trim();
+const CLOUDFLARE_API_TOKEN = (process.env.CLOUDFLARE_API_TOKEN || '').trim();
+
+async function cloudflarePurgeRequest(body) {
+  const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(CLOUDFLARE_ZONE_ID)}/purge_cache`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  let json = null;
+  try { json = await res.json(); } catch (e) {}
+  return Boolean(res.ok && json && json.success);
+}
+
+// Deve ser chamada ANTES de apagar os arquivos do disco (lista os arquivos da pasta).
+function purgeVideoFromCloudflare(vidId, videoRow) {
+  if (!CLOUDFLARE_ZONE_ID || !CLOUDFLARE_API_TOKEN || !vidId) return;
+
+  const hosts = [PLAYER_DOMAIN, DASH_DOMAIN, BASE_DOMAIN].filter(Boolean);
+  if (hosts.length === 0) return;
+  const uniqueHosts = Array.from(new Set(hosts));
+
+  const files = [];
+  try {
+    const videoDir = path.join(VIDEOS_DIR, path.basename(vidId));
+    if (fs.existsSync(videoDir)) {
+      for (const f of fs.readdirSync(videoDir)) {
+        if (f.startsWith('.')) continue;
+        for (const h of uniqueHosts) files.push(`https://${h}/videos/${vidId}/${f}`);
       }
     }
   } catch (e) {}
+
+  const videoUrl = videoRow && videoRow.video_url;
+  if (videoUrl && videoUrl.includes('/videos/')) {
+    const fileName = path.basename(videoUrl.split('?')[0]);
+    for (const h of uniqueHosts) files.push(`https://${h}/videos/${fileName}`);
+  }
+
+  const prefixes = uniqueHosts.map(h => `${h}/videos/${vidId}/`);
+
+  (async () => {
+    try {
+      // Purge por prefixo (1 chamada); se o plano nao suportar, cai para a lista de URLs.
+      const prefixOk = await cloudflarePurgeRequest({ prefixes });
+      const toPurge = prefixOk ? files.filter(u => !u.includes(`/videos/${vidId}/`)) : files;
+      for (let i = 0; i < toPurge.length; i += 30) {
+        await cloudflarePurgeRequest({ files: toPurge.slice(i, i + 30) });
+      }
+    } catch (err) {
+      console.error(`[Cloudflare] Falha ao limpar cache do video ${vidId}:`, err && err.message ? err.message : err);
+    }
+  })();
 }
+// Encaminha erros de rotas async para o Express (evita requisição pendurada).
+function asyncRoute(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+// Aceita apenas datas AAAA-MM-DD (evita SQL injection nos filtros de periodo).
+function safeIsoDate(value) {
+  const raw = String(value || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : new Date().toISOString().slice(0, 10);
+}
+
 function getClientIp(req) {
   const cf = req.headers['cf-connecting-ip'];
   const xf = req.headers['x-forwarded-for'];
@@ -1441,9 +1657,11 @@ const storage = multer.diskStorage({
   }
 });
 
+const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
+  limits: { fileSize: MAX_VIDEO_UPLOAD_BYTES },
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname || '').toLowerCase();
     const isMimeVideo = file.mimetype && (file.mimetype.startsWith('video/') || ALLOWED_MIME_TYPES.includes(file.mimetype));
@@ -4414,7 +4632,7 @@ app.get('/api/videos/top', authMiddleware, (req, res) => {
   res.json({ topVideos });
 });
 
-app.post('/api/videos', authMiddleware, (req, res) => {
+app.post('/api/videos', authMiddleware, asyncRoute(async (req, res) => {
   const { id, title, videoUrl, sourceType, filePath, duration, settings, fileSize, folderId } = req.body;
 
   if (!videoUrl || typeof videoUrl !== 'string') {
@@ -4448,7 +4666,7 @@ app.post('/api/videos', authMiddleware, (req, res) => {
 
   let resolvedDuration = duration;
   if ((!resolvedDuration || resolvedDuration === '10:00' || resolvedDuration === '05:00') && filePath) {
-    resolvedDuration = getVideoDurationFormatted(filePath);
+    resolvedDuration = await getVideoDurationFormattedAsync(filePath);
   }
 
   const initialStatus = sourceType === 'local' ? 'optimizing' : 'ready';
@@ -4489,7 +4707,7 @@ app.post('/api/videos', authMiddleware, (req, res) => {
   });
 
   res.json({ success: true, id: vidId });
-});
+}));
 
 app.patch('/api/videos/:id/move', authMiddleware, (req, res) => {
   const vidId = req.params.id;
@@ -4718,6 +4936,8 @@ app.delete('/api/videos/:id/permanent', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Permissão negada.' });
   }
 
+  purgeVideoFromCloudflare(vidId, existing);
+
   if (existing.source_type === 'local' && existing.file_path && fs.existsSync(existing.file_path)) {
     try { fs.unlinkSync(existing.file_path); } catch (e) {}
   }
@@ -4735,8 +4955,8 @@ app.delete('/api/videos/:id/permanent', authMiddleware, (req, res) => {
 app.delete('/api/videos/trash/empty', authMiddleware, (req, res) => {
   const isOwner = req.user.role === 'owner';
   const query = isOwner
-    ? 'SELECT id, source_type, file_path FROM videos WHERE deleted_at IS NOT NULL'
-    : 'SELECT id, source_type, file_path FROM videos WHERE deleted_at IS NOT NULL AND user_id = ?';
+    ? 'SELECT id, source_type, file_path, video_url FROM videos WHERE deleted_at IS NOT NULL'
+    : 'SELECT id, source_type, file_path, video_url FROM videos WHERE deleted_at IS NOT NULL AND user_id = ?';
   const trashItems = isOwner ? db.prepare(query).all() : db.prepare(query).all(req.user.id);
 
   if (trashItems.length === 0) {
@@ -4744,6 +4964,7 @@ app.delete('/api/videos/trash/empty', authMiddleware, (req, res) => {
   }
 
   for (const item of trashItems) {
+    purgeVideoFromCloudflare(item.id, item);
     if (item.source_type === 'local' && item.file_path && fs.existsSync(item.file_path)) {
       try { fs.unlinkSync(item.file_path); } catch (e) {}
     }
@@ -4796,9 +5017,11 @@ app.post('/api/videos/:id/moderate', authMiddleware, async (req, res) => {
   try {
     if (action === 'block') {
       db.prepare('UPDATE videos SET blocked_at = CURRENT_TIMESTAMP, blocked_reason = ? WHERE id = ?').run(cleanReason, vidId);
+      purgeVideoFromCloudflare(vidId, video);
     } else if (action === 'unblock') {
       db.prepare('UPDATE videos SET blocked_at = NULL, blocked_reason = NULL WHERE id = ?').run(vidId);
     } else if (action === 'delete') {
+      purgeVideoFromCloudflare(vidId, video);
       if (video.source_type === 'local' && video.file_path && fs.existsSync(video.file_path)) {
         try { fs.unlinkSync(video.file_path); } catch (e) {}
       }
@@ -4850,6 +5073,7 @@ app.post('/api/videos/:id/reprocess', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Arquivo fonte não disponível para transcodificação.' });
   }
 
+  try { db.prepare('UPDATE videos SET hls_failed = 0 WHERE id = ?').run(vidId); } catch (e) {}
   processVideoHLS(vidId, true);
   res.json({ success: true, message: 'Processamento HLS iniciado.' });
 });
@@ -4876,7 +5100,7 @@ app.post('/api/videos/:id/play', (req, res) => {
 app.get('/api/videos/:id/public', (req, res) => {
   const vidId = req.params.id;
   try {
-    const v = db.prepare('SELECT id, title, video_url, duration, settings_json, hls_ready, hls_manifest, smartautoplay_url, blocked_at, blocked_reason, user_id FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId);
+    const v = db.prepare('SELECT id, title, video_url, duration, settings_json, hls_ready, hls_manifest, hls_failed, status, optimization_progress, smartautoplay_url, blocked_at, blocked_reason, user_id FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId);
     if (!v) return res.status(404).json({ error: 'Vídeo não encontrado ou indisponível.' });
 
     if (!v.hls_ready) {
@@ -4964,7 +5188,7 @@ app.get('/api/videos/:id/public', (req, res) => {
       hlsUrl = `${origin}${manifestUrl}`;
     } else if (v.hls_ready && v.hls_manifest && fs.existsSync(diskManifest)) {
       hlsUrl = `${origin}${v.hls_manifest}`;
-    } else if (!activeProcessingVids.has(vidId)) {
+    } else if (!activeProcessingVids.has(vidId) && !v.hls_failed) {
       processVideoHLS(vidId, true);
     }
 
@@ -5333,8 +5557,8 @@ app.get('/api/analytics/video/:id', authMiddleware, (req, res) => {
     dateCondition = "1=1";
     prevCondition = "0=1";
   } else if (period === 'custom' && startDate && endDate) {
-    const sDate = String(startDate).slice(0, 10);
-    const eDate = String(endDate).slice(0, 10);
+    const sDate = safeIsoDate(startDate);
+    const eDate = safeIsoDate(endDate);
     dateCondition = `date(created_at, '+2 hours') >= date('${sDate}') AND date(created_at, '+2 hours') <= date('${eDate}')`;
     const sTime = new Date(sDate).getTime();
     const eTime = new Date(eDate).getTime();
@@ -5510,8 +5734,8 @@ function buildDateCondition(period, startDate, endDate) {
   } else if (period === 'all') {
     return { dc: '1=1' };
   } else if (period === 'custom' && startDate && endDate) {
-    const sDate = String(startDate).slice(0, 10);
-    const eDate = String(endDate).slice(0, 10);
+    const sDate = safeIsoDate(startDate);
+    const eDate = safeIsoDate(endDate);
     return { dc: `date(created_at, '+2 hours') >= date('${sDate}') AND date(created_at, '+2 hours') <= date('${eDate}')` };
   }
   return { dc: "date(created_at, '+2 hours') = date('now', '+2 hours')" };
@@ -6027,7 +6251,7 @@ app.delete('/api/analytics/video/:id/reset', authMiddleware, (req, res) => {
 
 
 app.post('/api/upload', authMiddleware, checkStorageQuotaPre, (req, res) => {
-  upload.single('videoFile')(req, res, (err) => {
+  upload.single('videoFile')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'Falha no upload do arquivo.' });
     }
@@ -6061,11 +6285,11 @@ app.post('/api/upload', authMiddleware, checkStorageQuotaPre, (req, res) => {
     }
 
     const host = req.get('host') || '';
-    const isProd = host.includes(BASE_DOMAIN);
+    const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
     const videoDomain = isProd ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
     const videoUrl = `${videoDomain}/videos/${req.file.filename}`;
 
-    const probedDuration = getVideoDurationFormatted(originalPath);
+    const probedDuration = await getVideoDurationFormattedAsync(originalPath);
 
     res.json({
       success: true,
@@ -6091,8 +6315,42 @@ app.post('/api/upload/chunk', authMiddleware, checkStorageQuotaPre, (req, res) =
     const originalName = req.query.originalName || (req.body && req.body.originalName) || 'video.mp4';
     const totalSize = parseInt(req.query.totalSize !== undefined ? req.query.totalSize : (req.body && req.body.totalSize || '0'), 10);
 
-    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || !req.file) {
+    const removeChunkFile = () => {
+      if (req.file && req.file.path) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      }
+    };
+
+    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || !req.file ||
+        chunkIndex < 0 || totalChunks < 1 || chunkIndex >= totalChunks || totalChunks > 10000) {
+      removeChunkFile();
       return res.status(400).json({ error: 'Parâmetros de fatia inválidos ou arquivo não enviado.' });
+    }
+
+    const chunkExt = path.extname(String(originalName)).toLowerCase();
+    if (!ALLOWED_EXTS.includes(chunkExt)) {
+      removeChunkFile();
+      return res.status(400).json({ error: 'Formato de arquivo inválido. Apenas vídeos (.mp4, .mov, .webm, .mkv, .avi, .m4v) são aceitos.' });
+    }
+
+    if (isNaN(totalSize) || totalSize <= 0 || totalSize > MAX_VIDEO_UPLOAD_BYTES) {
+      removeChunkFile();
+      return res.status(400).json({ error: 'Tamanho total do vídeo inválido ou acima do limite de 2 GB.' });
+    }
+
+    // Verifica a cota com o tamanho TOTAL do vídeo já na primeira fatia,
+    // em vez de só descobrir no final depois de receber tudo.
+    if (chunkIndex === 0) {
+      const isOwnerFirst = req.user.role === 'owner';
+      const memberLimitFirst = getMemberStorageLimitBytes();
+      if (!isOwnerFirst && (getUserStorageBytes(req.user.id) + totalSize > memberLimitFirst)) {
+        removeChunkFile();
+        return res.status(400).json({ error: `Cota individual de ${Math.round(memberLimitFirst / (1024 * 1024 * 1024))} GB atingida.` });
+      }
+      if (getUsedStorageBytes() + totalSize > getServerStorageLimitBytes()) {
+        removeChunkFile();
+        return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
+      }
     }
 
     if (chunkIndex + 1 < totalChunks) {
@@ -6124,32 +6382,42 @@ app.post('/api/upload/chunk', authMiddleware, checkStorageQuotaPre, (req, res) =
       return res.status(400).json({ error: 'Capacidade do servidor esgotada.' });
     }
 
-    const ext = path.extname(originalName).toLowerCase() || '.mp4';
+    const ext = chunkExt || '.mp4';
     const uniqueName = 'vsl_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex') + ext;
     const finalPath = path.join(VIDEOS_DIR, uniqueName);
 
+    const chunkPaths = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkPath = path.join(CHUNKS_DIR, `${uploadId}_chunk_${i}`);
+      if (!fs.existsSync(chunkPath)) {
+        return res.status(400).json({ error: `Fatia ${i} não encontrada. Envio incompleto.` });
+      }
+      chunkPaths.push(chunkPath);
+    }
+
     try {
+      // Junta as fatias via stream com backpressure: só lê a próxima fatia quando
+      // o disco terminou de gravar a anterior (antes o arquivo inteiro ia para a RAM).
       const writeStream = fs.createWriteStream(finalPath);
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = path.join(CHUNKS_DIR, `${uploadId}_chunk_${i}`);
-        if (!fs.existsSync(chunkPath)) {
-          writeStream.destroy();
-          try { fs.unlinkSync(finalPath); } catch (e) {}
-          return res.status(400).json({ error: `Fatia ${i} não encontrada. Envio incompleto.` });
+      try {
+        for (const chunkPath of chunkPaths) {
+          await pipeline(fs.createReadStream(chunkPath), writeStream, { end: false });
         }
-        const buf = fs.readFileSync(chunkPath);
-        writeStream.write(buf);
+        writeStream.end();
+        await finished(writeStream);
+      } catch (writeErr) {
+        writeStream.destroy();
+        throw writeErr;
+      }
+
+      for (const chunkPath of chunkPaths) {
         try { fs.unlinkSync(chunkPath); } catch (e) {}
       }
-      await new Promise((resolve, reject) => {
-        writeStream.end(resolve);
-        writeStream.on('error', reject);
-      });
 
       const finalStat = fs.statSync(finalPath);
-      const probedDuration = getVideoDurationFormatted(finalPath);
+      const probedDuration = await getVideoDurationFormattedAsync(finalPath);
       const host = req.get('host') || '';
-      const isProd = host.includes(BASE_DOMAIN);
+      const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
       const videoDomain = isProd ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
       const videoUrl = `${videoDomain}/videos/${uniqueName}`;
 
@@ -6257,7 +6525,7 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
     }
 
     const host = req.get('host') || '';
-    const isProd = host.includes(BASE_DOMAIN);
+    const isProd = Boolean(BASE_DOMAIN && host.includes(BASE_DOMAIN));
     const videoDomain = isProd ? `https://${PLAYER_DOMAIN}` : `${req.protocol}://${host}`;
     const videoUrl = `${videoDomain}/videos/${filename}`;
 
@@ -6274,7 +6542,7 @@ app.post('/api/upload/google-drive', authMiddleware, checkStorageQuotaPre, async
 
     const defaultSettings = getDefaultVideoSettings();
 
-    const realDuration = getVideoDurationFormatted(targetPath);
+    const realDuration = await getVideoDurationFormattedAsync(targetPath);
 
     db.prepare(`
       INSERT INTO videos (id, user_id, folder_id, title, source_type, file_path, file_size, video_url, duration, settings_json, status, optimization_progress)
@@ -6329,7 +6597,9 @@ app.options('/videos/*', (req, res) => {
   res.status(204).end();
 });
 
-app.get('/videos/:id/:file', (req, res) => {
+const posterGenerationInFlight = new Map();
+
+app.get('/videos/:id/:file', asyncRoute(async (req, res) => {
   const vidId = path.basename(req.params.id);
   const fileName = path.basename(req.params.file);
   const filePath = path.join(VIDEOS_DIR, vidId, fileName);
@@ -6337,9 +6607,11 @@ app.get('/videos/:id/:file', (req, res) => {
   if (fileName === 'main.m3u8') {
     const isMultiRendition = fs.existsSync(path.join(VIDEOS_DIR, vidId, 'video_0.m3u8'));
     if (!isMultiRendition && !activeProcessingVids.has(vidId)) {
-      processVideoHLS(vidId, true);
+      let row = null;
+      try { row = db.prepare('SELECT hls_failed FROM videos WHERE id = ? AND deleted_at IS NULL').get(vidId); } catch (e) {}
+      if (row && !row.hls_failed) processVideoHLS(vidId, true);
     }
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(filePath) && !activeProcessingVids.has(vidId)) {
       const videoDir = path.join(VIDEOS_DIR, vidId);
       const v0 = path.join(videoDir, 'video_0.m3u8');
       const vOld = path.join(videoDir, 'video.m3u8');
@@ -6375,13 +6647,13 @@ app.get('/videos/:id/:file', (req, res) => {
         if (inputPath && fs.existsSync(inputPath)) {
           const videoDir = path.join(VIDEOS_DIR, vidId);
           if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
-          try {
-            execFileSync('ffmpeg', ['-y', '-ss', '00:00:01', '-i', inputPath, '-vframes', '1', '-q:v', '2', filePath], { timeout: 12000 });
-          } catch (e) {
-            try {
-              execFileSync('ffmpeg', ['-y', '-i', inputPath, '-vframes', '1', '-q:v', '2', filePath], { timeout: 12000 });
-            } catch (e2) {}
+          // Assíncrono (não trava o servidor) e deduplicado entre requisições simultâneas.
+          let job = posterGenerationInFlight.get(filePath);
+          if (!job) {
+            job = generatePosterAsync(inputPath, filePath).finally(() => posterGenerationInFlight.delete(filePath));
+            posterGenerationInFlight.set(filePath, job);
           }
+          await job;
           if (fs.existsSync(filePath)) {
             try { db.prepare('UPDATE videos SET thumbnail = ? WHERE id = ?').run(`/videos/${vidId}/${fileName}`, vidId); } catch (e) {}
           }
@@ -6453,7 +6725,7 @@ app.get('/videos/:id/:file', (req, res) => {
   }
 
   res.sendFile(filePath);
-});
+}));
 
 app.get('/videos/:filename', (req, res) => {
   const safeFilename = path.basename(req.params.filename);

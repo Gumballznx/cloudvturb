@@ -1,6 +1,12 @@
-# CloudVTurb
+<p align="center">
+  <img src="assets/logo-512x512.png" alt="Logo CloudVTurb" width="140" height="140">
+</p>
 
-Plataforma SaaS de hospedagem e streaming de VSLs (Video Sales Letters) de alta conversao, otimizada para servidores dedicados, VPS e auto-hospedagem (self-hosting).
+<h1 align="center">CloudVTurb</h1>
+
+<p align="center">
+  Plataforma SaaS de hospedagem e streaming de VSLs (Video Sales Letters) de alta conversao, otimizada para servidores dedicados, VPS e auto-hospedagem (self-hosting).
+</p>
 
 ---
 
